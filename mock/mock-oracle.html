@@ -37,6 +37,11 @@
   .busy.on { display: flex; }
   .codes button { margin: 3px 4px 0 0; padding: 2px 8px; font-size: 13px; }
   #log { font-size: 12px; max-height: 260px; overflow: auto; background: #f7f9fa; border: 1px solid var(--line); padding: 6px; margin: 0; white-space: pre-wrap; }
+  .cmb { min-width: 260px; text-align: left; margin-top: 0; }
+  .pop { border: 1px solid #9aa7b3; background: #fff; padding: 6px; max-width: 420px; margin-top: 2px; }
+  .pop ul { list-style: none; margin: 6px 0 0; padding: 0; }
+  .pop li.opt { padding: 4px 8px; cursor: pointer; }
+  .pop li.opt:hover { background: #e4eef8; }
   .doc { border: 1px solid var(--line); padding: 20px; max-width: 520px; background: #fff; }
   @media print { header, aside, button, .busy { display: none !important; } .wrap { display: block; padding: 0; } .panel { border: 0; } }
 </style>
@@ -68,6 +73,11 @@ const PRODUCTS = {
   "5909876543210": { name: "Lidar module LDS-3", line: "LDS-3 SN 22-04419" },
   "5900000000017": { name: "Battery 14.4V 5200mAh", line: "BAT-144-52 batch 07/26" }
 };
+const PEOPLE = [
+  { value: "u1", text: "Doe Jane – Org A" }, { value: "u2", text: "Roe John – Org A" },
+  { value: "u4", text: "Roe John – Org B" }, { value: "u3", text: "You (test) – Org A" }
+];
+const ORGS = [{ value: "o1", text: "Org A" }, { value: "o2", text: "Org B" }, { value: "o3", text: "Org C" }];
 const USERS = [["u1", "Doe Jane"], ["u2", "Roe John"], ["u3", "You (test)"]];
 
 /* ---------- helpers ---------- */
@@ -76,7 +86,9 @@ const view = $("view");
 const params = new URLSearchParams(location.search);
 /* mock variants: ?variant=nolist,iframe,reload,mangle,saveerror (comma separated)
    nolist: no User list | iframe: the form lives in an iframe | reload: full page reload between steps
-   mangle: the pasted line gets upper-cased by the "framework" | saveerror: Save always fails */
+   mangle: the pasted line gets upper-cased by the "framework" | saveerror: Save always fails
+   combo: the User field is a searchable drop-down (results arrive late; one person has two organizations)
+   orgcombo: adds an Organization drop-down of the same kind */
 const variants = (params.get("variant") || "").split(",");
 const has = v => variants.includes(v);
 function log(t) { const l = $("log"); l.textContent = new Date().toLocaleTimeString() + "  " + t + "\n" + l.textContent; }
@@ -98,6 +110,37 @@ function bind(id, key) {
   el.addEventListener("input", upd);
   el.addEventListener("change", upd);
   upd();
+}
+
+/* ---------- searchable drop-down ---------- */
+function comboHtml(p, label) {
+  return `<label for="${p}">${label}</label>
+    <button type="button" class="cmb" id="${p}">– select –</button>
+    <div class="pop" id="${p}:pop" hidden><input id="${p}:srch" autocomplete="off" placeholder="Search…"><ul id="${p}:list"></ul></div>`;
+}
+function wireCombo(p, items, key) {
+  const btn = $f(p), pop = $f(p + ":pop"), srch = $f(p + ":srch"), list = $f(p + ":list");
+  let timer;
+  btn.addEventListener("click", () => {
+    pop.hidden = !pop.hidden;
+    if (!pop.hidden) { srch.value = ""; list.innerHTML = ""; srch.focus(); }
+  });
+  srch.addEventListener("input", () => {
+    clearTimeout(timer);
+    timer = setTimeout(() => {
+      const q = srch.value.trim().toLowerCase();
+      list.innerHTML = q ? items.filter(i => i.text.toLowerCase().includes(q))
+        .map(i => `<li class="opt" data-v="${esc(i.value)}">${esc(i.text)}</li>`).join("") : "";
+    }, 400);
+  });
+  list.addEventListener("click", e => {
+    const li = e.target.closest("li.opt");
+    if (!li) return;
+    model[key] = li.dataset.v;
+    btn.textContent = li.textContent;
+    pop.hidden = true;
+    log("Chose in " + key + " list: " + li.textContent);
+  });
 }
 
 /* ---------- views ---------- */
@@ -159,11 +202,12 @@ function renderForm(code, p) {
     <input id="pt1:r2:0:it2::content">
     <label for="pt1:r2:0:it3::content">Line 3 (append)</label>
     <textarea id="pt1:r2:0:it3::content"></textarea>
-    ${has("nolist") ? "" : `<label for="pt1:r2:0:soc1::content">User</label>
+    ${has("nolist") ? "" : has("combo") ? comboHtml("pt1:r2:0:cmb1", "User") : `<label for="pt1:r2:0:soc1::content">User</label>
     <select id="pt1:r2:0:soc1::content">
       <option value="">– select –</option>
       ${USERS.map(([v, t]) => `<option value="${v}">${esc(t)}</option>`).join("")}
     </select>`}
+    ${has("orgcombo") ? comboHtml("pt1:r2:0:cmb2", "Organization") : ""}
     <br><button id="pt1:r2:0:cb_save" type="button">Save</button>
     <div id="pt1:r2:0:msg"></div>`;
   if (has("iframe")) {
@@ -180,7 +224,9 @@ function renderForm(code, p) {
   bind("pt1:r2:0:it1::content", "line1");
   bind("pt1:r2:0:it2::content", "line2");
   bind("pt1:r2:0:it3::content", "line3");
-  if (!has("nolist")) bind("pt1:r2:0:soc1::content", "user");
+  if (!has("nolist") && !has("combo")) bind("pt1:r2:0:soc1::content", "user");
+  if (has("combo")) wireCombo("pt1:r2:0:cmb1", PEOPLE, "user");
+  if (has("orgcombo")) wireCombo("pt1:r2:0:cmb2", ORGS, "org");
   $f("pt1:r2:0:cb_save").addEventListener("click", () => doSave(code));
   if (has("mangle")) $f("pt1:r2:0:it2::content").addEventListener("change", e => { e.target.value = e.target.value.toUpperCase(); });
 }
@@ -191,6 +237,7 @@ async function doSave(code) {
   if (model.line2 !== model.line1) errors.push("Line 2 must be a copy of line 1.");
   if (!(model.line3 || "").trim()) errors.push("Line 3 is empty.");
   if (!has("nolist") && !model.user) errors.push("No user selected.");
+  if (has("orgcombo") && !model.org) errors.push("No organization selected.");
   if (errors.length) {
     msg.innerHTML = `<div class="msg err">${errors.join("<br>")}</div>`;
     log("Save rejected: " + errors.join(" "));
@@ -203,7 +250,7 @@ async function doSave(code) {
     return;
   }
   const doc = Math.floor(100000 + Math.random() * 900000);
-  log(`Saved document ${doc} (code ${code}; line3: "${model.line3}"; user: ${model.user || "-"})`);
+  log(`Saved document ${doc} (code ${code}; line3: "${model.line3}"; user: ${model.user || "-"}; org: ${model.org || "-"})`);
   if (has("reload")) return go("saved", "&doc=" + doc + "&code=" + encodeURIComponent(code));
   renderSaved(code, doc);
 }

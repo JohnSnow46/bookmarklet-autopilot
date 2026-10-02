@@ -1,4 +1,5 @@
-// Learning steps. type: input | button | select | link | any, optional: can be skipped.
+// Learning steps. type: input | button | select | link | any. optional: can be skipped (the whole list when the step
+// has a group). skipOwn: Skip skips only this step.
 const STEPS = [
   { key: 'search', desc: 'the code search field', type: 'input' },
   { key: 'searchBtn', desc: 'the Search button', type: 'button' },
@@ -6,7 +7,14 @@ const STEPS = [
   { key: 'line1', desc: 'the line to copy', type: 'input' },
   { key: 'line2', desc: 'the field you paste into', type: 'input' },
   { key: 'line3', desc: 'the field you append to', type: 'input' },
-  { key: 'user', desc: 'the User list', type: 'select', optional: true },
+  { key: 'user', desc: 'the User list (a normal drop-down; Skip if yours is a searchable list)', type: 'select', optional: true },
+  // searchable lists: click the opener normally to open the list, Ctrl+click to teach each part
+  { key: 'personOpen', desc: 'the person list: the field or button that opens it (then open it with a plain click)', type: 'any', optional: true, group: 'person' },
+  { key: 'personSearch', desc: 'the search field inside the opened person list (Skip if there is none)', type: 'input', optional: true, skipOwn: true, group: 'person' },
+  { key: 'personOption', desc: 'one result row of the person list (type a name first, so that results show)', type: 'any', group: 'person' },
+  { key: 'orgOpen', desc: 'the organization list: the field or button that opens it (Skip if you never change it)', type: 'any', optional: true, group: 'org' },
+  { key: 'orgSearch', desc: 'the search field inside the opened organization list (Skip if there is none)', type: 'input', optional: true, skipOwn: true, group: 'org' },
+  { key: 'orgOption', desc: 'one result row of the organization list (type a name first, so that results show)', type: 'any', group: 'org' },
   { key: 'save', desc: 'the Save button', type: 'button' },
   { key: 'gen', desc: 'the Generate button', type: 'button' },
   { key: 'print', desc: 'the Print button', type: 'button' },
@@ -47,6 +55,11 @@ const warnings = (el, key, type, sel, frame) => {
   return w;
 };
 
+// Marks the not yet taught steps of a group as skipped and moves on past them.
+const skipGroup = g => {
+  while (st.i < STEPS.length && STEPS[st.i].group === g) { st.steps[STEPS[st.i].key] = { skipped: true }; st.i++; }
+};
+
 const pick = e => {
   if (!e.ctrlKey || b.contains(e.target)) return;
   e.preventDefault();
@@ -58,9 +71,11 @@ const pick = e => {
   if (w.length && !confirm('Warning for ' + s.desc + ':\n- ' + w.join('\n- ') + '\n\nAre you sure?')) return;
   // Store the visible text only where Auto needs it (button captions), never e.g. a product name.
   st.steps[key] = { ...loc, label: labelOf(el), text: TXT.includes(key) ? el.textContent.trim() : '' };
+  if (/Option$/.test(key)) st.steps[key].match = optSelector(el); // matches every row of that list
   el.style.outline = '3px solid rgb(46,125,50)';
   setTimeout(() => { el.style.outline = ''; }, 800);
   st.i++;
+  if (key === 'user') skipGroup('person'); // a normal drop-down needs no searchable person list
   store();
   draw();
 };
@@ -68,7 +83,13 @@ const pick = e => {
 let off = hookPicker(pick);
 
 const back = () => {
-  if (st.i > 0) { st.i--; delete st.steps[STEPS[st.i].key]; store(); draw(); }
+  if (st.i === 0) return;
+  do {
+    st.i--;
+    delete st.steps[STEPS[st.i].key];
+  } while (st.i > 0 && STEPS[st.i].group && STEPS[st.i - 1].group === STEPS[st.i].group && (st.steps[STEPS[st.i - 1].key] || {}).skipped);
+  store();
+  draw();
 };
 
 // Rules every configuration starts with: the pasted line equals the copied one, the append is not empty,
@@ -89,25 +110,30 @@ const finish = () => {
   const extra = prompt('Text to append (' + STEPS[5].desc + '):', o.extraLine || '');
   if (extra === null) return;
   if (!extra.trim()) { alert('The appended text cannot be empty.'); return; }
-  let userOption = '';
-  if (!st.steps.user.skipped) {
-    const u = prompt('Name of the option to select in the User list (exactly as shown):', o.userOption || '');
+  // who Auto selects in the person list, and (optionally) which organization
+  const first = (o.profiles || [])[0] || {};
+  const hasPerson = !st.steps.user.skipped || !st.steps.personOpen.skipped;
+  let profiles = [];
+  if (hasPerson) {
+    const u = prompt('Your name, i.e. the option to select in the person list (exactly as shown):', first.name || '');
     if (u === null) return;
-    if (!u.trim()) { alert('The option name cannot be empty. If there is no list, go Back and skip that step.'); return; }
-    userOption = u.trim();
+    if (!u.trim()) { alert('The name cannot be empty. If there is no such list, go Back and skip it.'); return; }
+    const g = prompt('Organization to select (leave empty if not needed). More people or organizations can be added later with Show:', first.org || '');
+    if (g === null) return;
+    profiles = [{ name: u.trim(), org: g.trim() }];
   }
   const rules = defaultRules(st.steps);
   const lines = STEPS.map((s, i) => {
     const c = st.steps[s.key];
     return (i + 1) + '. ' + s.key + ' - ' + (c.skipped ? 'skipped' : c.tag + (c.text ? ' "' + c.text + '"' : '') + (c.alt ? ' (+ fallback)' : ''));
   });
-  if (!confirm('Check the configuration:\n' + lines.join('\n') + '\n\nAppend text: "' + extra + '"' + (userOption ? '\nList option: "' + userOption + '"' : '')
+  if (!confirm('Check the configuration:\n' + lines.join('\n') + '\n\nAppend text: "' + extra + '"' + (profiles.length ? '\nProfile: ' + profileText(profiles[0]) : '')
     + '\n\nValidation rules:\n' + rules.map(ruleText).join('\n') + '\n\nSave it?')) return;
   const confirmSave = confirm('Ask "Save?" before every Save? (OK = yes, Cancel = no)');
   localStorage.setItem('autoCfg', JSON.stringify({
     v: 3,
     steps: st.steps,
-    opts: { extraLine: extra, userOption, confirmSave },
+    opts: { extraLine: extra, profiles, confirmSave },
     rules,
   }));
   st.done = true;
@@ -134,7 +160,15 @@ const draw = () => {
   const s = STEPS[st.i];
   b.innerHTML = '<b>Learn ' + (st.i + 1) + '/' + STEPS.length + ':</b> Ctrl+click on: <u>' + s.desc + '</u>'
     + (s.optional ? ' (optional)' : '') + ' (a plain click works normally)';
-  if (s.optional) barButton(b, 'Skip', () => { st.steps[s.key] = { skipped: true }; st.i++; store(); draw(); });
+  if (s.optional) {
+    const label = s.group && !s.skipOwn ? 'Skip this list' : 'Skip';
+    barButton(b, label, () => {
+      if (s.group && !s.skipOwn) skipGroup(s.group);
+      else { st.steps[s.key] = { skipped: true }; st.i++; }
+      store();
+      draw();
+    });
+  }
   barButton(b, 'Back', back);
   barButton(b, 'Quit', () => { off(); b.remove(); });
 };

@@ -53,7 +53,7 @@ test('full page reload between steps: Auto continues where it stopped each time 
   const s = await newSession(browser, ANSWERS);
   const learn = await s.context.newPage();
   await learnAll(learn, s.context, { variant: 'reload' });
-  expect(await learn.evaluate(() => Object.keys(JSON.parse(localStorage.getItem('autoCfg')).steps).length)).toBe(12);
+  expect(await learn.evaluate(() => Object.keys(JSON.parse(localStorage.getItem('autoCfg')).steps).length)).toBe(18);
   await learn.close();
 
   const page = await s.context.newPage();

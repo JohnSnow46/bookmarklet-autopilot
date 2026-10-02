@@ -20,10 +20,10 @@ test('learning, then Auto runs the whole process to Apply', async ({ browser }) 
   const learn = await context.newPage();
   await learnAll(learn, context);
   const cfg = await learn.evaluate(() => JSON.parse(localStorage.getItem('autoCfg')));
-  expect(Object.keys(cfg.steps)).toHaveLength(12);
+  expect(Object.keys(cfg.steps)).toHaveLength(18);
   expect(cfg.steps.gen.text).toBe('Generate');
   expect(cfg.steps.print.text).toBe('Print');
-  expect(cfg.opts).toEqual({ extraLine: 'Test append', userOption: 'You (test)', confirmSave: true });
+  expect(cfg.opts).toEqual({ extraLine: 'Test append', profiles: [{ name: 'You (test)', org: '' }], confirmSave: true });
   await learn.close();
 
   const page = await context.newPage();
@@ -47,7 +47,7 @@ test('skipped optional step: form without a user list', async ({ browser }) => {
   await learnAll(learn, context, { variant: 'nolist', skipUser: true });
   const cfg = await learn.evaluate(() => JSON.parse(localStorage.getItem('autoCfg')));
   expect(cfg.steps.user).toEqual({ skipped: true });
-  expect(cfg.opts.userOption).toBe('');
+  expect(cfg.opts.profiles).toEqual([]);
   // no question about the option when the list is skipped
   expect(dialogs.some(d => d.message.includes('option to select'))).toBe(false);
   await learn.close();

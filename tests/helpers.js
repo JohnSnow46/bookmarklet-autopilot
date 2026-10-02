@@ -70,8 +70,30 @@ async function learnAll(page, context, { code = '5901234123457', skipUser = fals
   await form.locator(id('pt1:r2:0:it1::content')).click(CTRL);
   await form.locator(id('pt1:r2:0:it2::content')).click(CTRL);
   await form.locator(id('pt1:r2:0:it3::content')).click(CTRL);
-  if (skipUser) await page.locator('[id="__learn"] button', { hasText: 'Skip' }).click();
-  else await form.locator(id('pt1:r2:0:soc1::content')).click(CTRL);
+  const bar = page.locator('[id="__learn"]');
+  const skipList = () => bar.getByRole('button', { name: 'Skip this list' }).click();
+  // a searchable list: teach the opener, the search field and one result row; then really choose the row
+  const learnCombo = async (p, query) => {
+    await form.locator(id(p)).click(CTRL);
+    await form.locator(id(p)).click();
+    await form.locator(id(p + ':srch')).click(CTRL);
+    await form.locator(id(p + ':srch')).fill(query);
+    const row = form.locator(id(p + ':list') + ' li.opt').first();
+    await row.waitFor();
+    await row.click(CTRL);
+    await row.click();
+  };
+  const combo = has(variant, 'combo'), orgcombo = has(variant, 'orgcombo');
+  if (skipUser) {
+    await bar.getByRole('button', { name: 'Skip', exact: true }).click(); // the normal User list
+    if (combo) await learnCombo('pt1:r2:0:cmb1', 'Doe');
+    else await skipList(); // person list
+    if (orgcombo) await learnCombo('pt1:r2:0:cmb2', 'Org A');
+    else await skipList(); // organization list
+  } else {
+    await form.locator(id('pt1:r2:0:soc1::content')).click(CTRL);
+    await skipList(); // organization list (the person list is skipped automatically)
+  }
   await form.locator(id('pt1:r2:0:it2::content')).fill(await form.locator(id('pt1:r2:0:it1::content')).inputValue());
   await form.locator(id('pt1:r2:0:it3::content')).fill('appended');
   if (!skipUser) await form.locator(id('pt1:r2:0:soc1::content')).selectOption({ label: 'You (test)' });
@@ -93,7 +115,7 @@ async function learnAll(page, context, { code = '5901234123457', skipUser = fals
   const apply = popup.locator(id('pt1:p1:cb_apply'));
   await apply.waitFor({ timeout: 15000 });
   await apply.click(CTRL);
-  await popup.locator('[id="__learn"] button', { hasText: 'Skip' }).click(); // optional step: error message
+  await popup.locator('[id="__learn"]').getByRole('button', { name: 'Skip', exact: true }).click(); // optional step: error message
   await popup.locator('[id="__learn"] button', { hasText: 'Save settings' }).click();
   if (expectDone) await popup.locator('[id="__learn"]').getByText('Done').waitFor();
   else await popup.waitForTimeout(500); // let the (rejected) dialogs finish

@@ -247,3 +247,30 @@ const errorTexts = errStep => {
   allDocs().forEach(d => d.querySelectorAll(ERR_SEL).forEach(add));
   return [...new Set(out)];
 };
+
+/* ---------- profiles (who / which organization Auto selects) and searchable lists ---------- */
+// Personal profiles of this computer win over the ones in the configuration.
+const getProfiles = cfg => {
+  try {
+    const p = JSON.parse(localStorage.getItem('autoProfiles') || 'null');
+    if (p && p.length) return p;
+  } catch (_) {}
+  return (cfg.opts && cfg.opts.profiles) || [];
+};
+const profileText = p => p.name + (p.org ? ' / ' + p.org : '');
+
+// A real-looking click (mousedown, mouseup, click): frameworks often ignore a bare click().
+const fireClick = el => {
+  const W = winOf(el);
+  ['mousedown', 'mouseup', 'click'].forEach(t => el.dispatchEvent(new W.MouseEvent(t, { bubbles: true, cancelable: true, view: W })));
+};
+
+// The row an option belongs to (its text may be spread over several cells).
+const rowOf = el => el.closest('tr,li,[role=option],[role=row]') || el;
+
+// A selector that matches every option of a list, built from one example option: tag, role, stable classes.
+const optSelector = el => {
+  const cls = [...el.classList].filter(c => !/\d/.test(c) && c.length < 30).slice(0, 2);
+  const role = el.getAttribute('role');
+  return el.tagName.toLowerCase() + (role ? '[role="' + role + '"]' : '') + cls.map(c => '.' + CSS.escape(c)).join('');
+};

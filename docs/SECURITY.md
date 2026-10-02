@@ -13,7 +13,7 @@ types for you) and also the whole risk: the code you paste into a bookmark is tr
   `WebSocket`, `EventSource`, `eval`, `new Function`, `importScripts`, `import(` or `document.cookie`.
 - It has no runtime dependencies. `terser` and Playwright are build/test tools only and are not part of the output.
 - It reads and writes only `localStorage` keys on the page's own origin: `autoLearn` (learning state), `autoCfg`
-  (configuration and rules) and `autoUserOption` (the list option a colleague typed on the first run of an exported Auto).
+  (configuration and rules) and `autoProfiles` and `autoProfileIdx` (the name/organization a person typed or chose on this computer).
 - The only other effects are clicks, typing into fields, the "Save?" question, alerts/prompts, and (Export) one clipboard write.
 
 ## Data handling
@@ -23,7 +23,7 @@ types for you) and also the whole risk: the code you paste into a bookmark is tr
 | Selectors, frame paths, fallback selectors | browser `localStorage`, per origin | Page structure, not content. Never committed. |
 | Button captions (`Search`, `Save`, `Generate`, `Print`, `Apply`) | same | Needed to tell the Generate/Print states apart. |
 | Field labels of rule fields (e.g. a `<label>` text) | same, in `autoCfg.rules` | UI captions, not record data. |
-| Appended text, list option name, "ask before Save" flag | same | Typed by the user at the end of learning. |
+| Appended text, profiles (name, organization), "ask before Save" flag | same | Typed by the user. A name is personal data: it stays in the browser, is included in an export only if you agree, and never goes to the repository. |
 | Values of fields | **shown** in the failure message of a rule (an alert on your screen) | Never stored or sent. |
 | Page content, product names, scanned codes | **not stored** | Learn only keeps captions for the steps that need them. |
 
@@ -48,6 +48,7 @@ can read the configuration. Share it only through internal channels.
 | 10 | Export embeds the configuration as base64 in a code string that gets pasted and sent around. | Low | Documented above; Export asks whether to leave out the personal list option. |
 | 11 | The error heuristic (`role=alert`, `.error`, ...) can match an unrelated visible element. | Low | Auto only reacts to texts that were **not** visible before Save, and the learned error element has priority. A false positive stops Auto (safe direction). |
 | 12 | The "looks auto-generated" id check is a heuristic. | Info | Only a warning; the fallback selector reduces the impact. |
+| 13 | Selecting a person in a searchable list could pick the wrong person (same name, two organizations). | Medium (data quality) | Mitigated: exactly one matching row is required, otherwise Auto stops, lists the rows and selects nothing. |
 
 ## Owner's tasks for the installer
 

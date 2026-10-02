@@ -25,7 +25,7 @@ test('shifted step: wrong element type is flagged and can be rejected', async ({
   expect(dialogs[0].message).toContain('Are you sure?');
   const st = await learnState(page);
   expect(st === null || st.i === 0).toBe(true); // rejected: nothing was stored
-  await page.locator('[id="__learn"]').getByText('Learn 1/12').waitFor();
+  await page.locator('[id="__learn"]').getByText('Learn 1/18').waitFor();
 });
 
 test('shifted step: the user can accept the warning anyway', async ({ browser }) => {
@@ -83,12 +83,13 @@ test('summary lists every step before the configuration is saved', async ({ brow
   await learnAll(page, context);
   const summary = dialogs.find(d => d.message.startsWith('Check the configuration'));
   expect(summary).toBeTruthy();
-  for (const key of ['search', 'searchBtn', 'result', 'line1', 'line2', 'line3', 'user', 'save', 'gen', 'print', 'apply', 'error']) {
+  for (const key of ['search', 'searchBtn', 'result', 'line1', 'line2', 'line3', 'user', 'personOpen', 'personSearch', 'personOption', 'orgOpen', 'orgSearch', 'orgOption', 'save', 'gen', 'print', 'apply', 'error']) {
     expect(summary.message).toContain(key + ' - ');
   }
   expect(summary.message).toContain('save - button "Save"');
   expect(summary.message).toContain('Append text: "Summary append"');
-  expect(summary.message).toContain('List option: "You (test)"');
+  expect(summary.message).toContain('Profile: You (test)');
+  expect(summary.message).toContain('personOpen - skipped');
 });
 
 test('rejecting the summary does not save the configuration', async ({ browser }) => {

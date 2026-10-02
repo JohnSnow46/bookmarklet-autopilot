@@ -27,8 +27,8 @@ in the browser's own `localStorage`. Nothing is sent anywhere.
 | **Auto** | Runs the process from the saved configuration: waits for elements, fills fields with real framework events, checks your validation rules, optionally asks "Save?", clicks Generate → Print, takes over the new tab and clicks Apply. Stops with the step and the reason when something is wrong, including an error message shown by the application after Save. |
 | **Validate** | Same Ctrl+click idea for validation rules: *A equals B*, *A differs from B*, *A is not empty*, *A equals / contains a text*, *A matches a regex*. Each rule says when it runs: before Save, before Generate, or manual only. Works with any field, not only this process. |
 | **Check** | Runs the "manual only" rules on the current page, on any page. |
-| **Show** | Shows what has been learned: steps, texts, rules. |
-| **Export** | Creates an Auto bookmarklet with your configuration built in (base64) and copies it to the clipboard (or shows it in a prompt). Give it to a colleague through an internal channel. |
+| **Show** | Shows what has been learned: steps, texts, rules, profiles. Lets you add, delete or change the profiles (who and which organization Auto selects) of this computer. |
+| **Export** | Creates an Auto bookmarklet with your configuration built in (base64) and copies it to the clipboard (or shows it in a prompt). Give it to a colleague through an internal channel. Your profile can be left out: the colleague is asked for their own on the first run. |
 
 ### Validation rules in practice
 
@@ -40,9 +40,23 @@ Auto stopped at "validation before Save": Validation failed, nothing was saved.
 Rule 1 (equal): "line1" is "PCB-R10-MAIN rev.B" but "line2" is "PCB-R10-MAIN REV.B"
 ```
 
+### Who and which organization: lists and profiles
+
+The person (and the organization) are not in the script, they are a **profile** (`name` + optional `org`).
+
+- A normal `<select>` list: pick it in Learn (the *User list* step).
+- A **searchable list** (a field that opens a panel with a search box and result rows): in Learn teach the opener, the search field
+  and one result row (`Skip this list` skips the whole group). Auto opens it, types the name, waits until the rows stop changing,
+  and clicks the one row that contains the name (and the organization, when rows show it). It presses Enter if the list searches on Enter.
+- **Never guessed:** if no row or more than one row matches (a person assigned to two organizations), Auto stops, lists the rows and selects nothing.
+  Put the organization into the profile to tell the rows apart.
+- A separate **organization list** is taught the same way and filled from the profile's `org`.
+- **Several profiles** (Show → change profiles): Auto asks which one to use and remembers the answer.
+- Profiles typed in Show or asked on the first run are personal to the computer and override the ones in the configuration.
+
 ### Handing the setup to a colleague
 
-Export leaves your personal list option out if you wish; the colleague is asked for their own on the first run and the
+Export leaves your profile out if you wish; the colleague is asked for their own on the first run and the
 answer is remembered on their computer. The setup only works if their Oracle screen has the same layout and
 element ids as yours (generated ids may differ, see the notes below).
 
@@ -86,6 +100,8 @@ Variants are selected with `?variant=…` (comma separated):
 | `reload` | full page reload between steps |
 | `mangle` | the "framework" upper-cases the pasted line (tests the rules) |
 | `saveerror` | Save always fails with an application error |
+| `combo` | the User field is a searchable drop-down with late results; one person is in two organizations |
+| `orgcombo` | adds an Organization drop-down of the same kind |
 
 ## Using it at work
 
