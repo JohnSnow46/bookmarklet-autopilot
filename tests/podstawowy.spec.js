@@ -20,7 +20,7 @@ test('learning, then Auto runs the whole process to Apply', async ({ browser }) 
   const learn = await context.newPage();
   await learnAll(learn, context);
   const cfg = await learn.evaluate(() => JSON.parse(localStorage.getItem('autoCfg')));
-  expect(Object.keys(cfg.steps)).toHaveLength(11);
+  expect(Object.keys(cfg.steps)).toHaveLength(12);
   expect(cfg.steps.gen.text).toBe('Generate');
   expect(cfg.steps.print.text).toBe('Print');
   expect(cfg.opts).toEqual({ extraLine: 'Test append', userOption: 'You (test)', confirmSave: true });

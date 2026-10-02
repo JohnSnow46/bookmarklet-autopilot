@@ -3,6 +3,7 @@ const path = require('path');
 
 const MOCK = '/mock/mock-oracle.html';
 const CTRL = { modifiers: ['Control'] };
+const id = s => '[id="' + s + '"]';
 
 // Bookmarklet code from dist/ without the javascript: prefix (as the browser would run it).
 const bookmarklet = name =>
@@ -26,32 +27,57 @@ async function stubPrint(context) {
   await context.addInitScript(() => { window.print = () => { window.__printed = (window.__printed || 0) + 1; }; });
 }
 
-const id = s => '[id="' + s + '"]';
+// A fresh browser context with dialogs tracked and print stubbed.
+async function newSession(browser, answers = {}) {
+  const context = await browser.newContext();
+  const dialogs = [];
+  trackDialogs(context, dialogs, answers);
+  await stubPrint(context);
+  return { context, dialogs };
+}
+
+const has = (variant, v) => variant.split(',').includes(v);
 
 // Full learning run on the mock: Ctrl+click teaches, a plain click moves the process on.
 async function learnAll(page, context, { code = '5901234123457', skipUser = false, variant = '', prep, expectDone = true } = {}) {
+  const reload = has(variant, 'reload'), iframe = has(variant, 'iframe');
+  const form = iframe ? page.frameLocator(id('pt1:r2:0:frm')) : page;
+  const learn = bookmarklet('learn');
+  // after a full page reload the bookmarklet is gone: run it again (it asks to continue, the dialog is accepted)
+  const nav = async view => {
+    if (!reload) return;
+    await page.waitForURL(new RegExp('view=' + view));
+    await page.waitForLoadState('load');
+    await page.evaluate(learn);
+  };
+
   await page.goto(MOCK + (variant ? '?variant=' + variant : ''));
   if (prep) await prep(page);
-  await page.evaluate(bookmarklet('learn'));
+  await page.evaluate(learn);
 
   await page.locator(id('pt1:r1:0:it1::content')).click(CTRL);
   await page.locator('[data-c="' + code + '"]').click();
   await page.locator(id('pt1:r1:0:cb1')).click(CTRL);
   await page.locator(id('pt1:r1:0:cb1')).click();
+  await nav('results');
   await page.locator('a.xResult').click(CTRL);
   await page.locator('a.xResult').click();
+  await nav('form');
 
-  await page.locator(id('pt1:r2:0:it1::content')).click(CTRL);
-  await page.locator(id('pt1:r2:0:it2::content')).click(CTRL);
-  await page.locator(id('pt1:r2:0:it3::content')).click(CTRL);
+  await form.locator(id('pt1:r2:0:it1::content')).waitFor();
+  if (iframe) await page.waitForTimeout(600); // let Learn hook the freshly created frame
+  await form.locator(id('pt1:r2:0:it1::content')).click(CTRL);
+  await form.locator(id('pt1:r2:0:it2::content')).click(CTRL);
+  await form.locator(id('pt1:r2:0:it3::content')).click(CTRL);
   if (skipUser) await page.locator('[id="__learn"] button', { hasText: 'Skip' }).click();
-  else await page.locator(id('pt1:r2:0:soc1::content')).click(CTRL);
-  await page.locator(id('pt1:r2:0:it2::content')).fill(await page.locator(id('pt1:r2:0:it1::content')).inputValue());
-  await page.locator(id('pt1:r2:0:it3::content')).fill('appended');
-  if (!skipUser) await page.locator(id('pt1:r2:0:soc1::content')).selectOption({ label: 'You (test)' });
+  else await form.locator(id('pt1:r2:0:soc1::content')).click(CTRL);
+  await form.locator(id('pt1:r2:0:it2::content')).fill(await form.locator(id('pt1:r2:0:it1::content')).inputValue());
+  await form.locator(id('pt1:r2:0:it3::content')).fill('appended');
+  if (!skipUser) await form.locator(id('pt1:r2:0:soc1::content')).selectOption({ label: 'You (test)' });
 
-  await page.locator(id('pt1:r2:0:cb_save')).click(CTRL);
-  await page.locator(id('pt1:r2:0:cb_save')).click();
+  await form.locator(id('pt1:r2:0:cb_save')).click(CTRL);
+  await form.locator(id('pt1:r2:0:cb_save')).click();
+  await nav('saved');
   const gen = page.locator(id('pt1:r3:0:cb_gen'));
   await gen.click(CTRL);
   await gen.click();
@@ -62,14 +88,43 @@ async function learnAll(page, context, { code = '5901234123457', skipUser = fals
   await gen.click();
   const popup = await popupP;
   await popup.waitForLoadState();
-  await popup.evaluate(bookmarklet('learn')); // continue learning in the new tab (the confirm is accepted)
+  await popup.evaluate(learn); // continue learning in the new tab (the confirm is accepted)
   const apply = popup.locator(id('pt1:p1:cb_apply'));
   await apply.waitFor({ timeout: 15000 });
   await apply.click(CTRL);
+  await popup.locator('[id="__learn"] button', { hasText: 'Skip' }).click(); // optional step: error message
   await popup.locator('[id="__learn"] button', { hasText: 'Save settings' }).click();
   if (expectDone) await popup.locator('[id="__learn"]').getByText('Done').waitFor();
   else await popup.waitForTimeout(500); // let the (rejected) dialogs finish
   await popup.close();
 }
 
-module.exports = { MOCK, CTRL, bookmarklet, trackDialogs, stubPrint, learnAll, id };
+// Scans a code and runs Auto. With reload = true Auto is clicked again after every full page reload
+// (the way a person has to) until the print tab opens. Returns the print tab.
+async function autoRun(page, { code = '5909876543210', reload = false } = {}) {
+  let popup = null;
+  page.on('popup', p => { popup = p; });
+  await page.locator('[data-c="' + code + '"]').click();
+  for (let i = 0; i < (reload ? 8 : 1) && !popup; i++) {
+    const url0 = page.url();
+    await page.evaluate(bookmarklet('auto'));
+    const t0 = Date.now();
+    while (!popup && page.url() === url0 && Date.now() - t0 < 30000) await page.waitForTimeout(200);
+    if (!popup) await page.waitForLoadState('load');
+  }
+  if (!popup) throw new Error('the print tab never opened');
+  return popup;
+}
+
+// The text of the first dialog (alert) that starts with the given prefix; waits for it.
+async function waitDialog(dialogs, prefix, timeout = 30000) {
+  const t0 = Date.now();
+  while (Date.now() - t0 < timeout) {
+    const d = dialogs.find(x => x.message.startsWith(prefix));
+    if (d) return d.message;
+    await new Promise(r => setTimeout(r, 200));
+  }
+  throw new Error('no dialog starting with "' + prefix + '"; got: ' + JSON.stringify(dialogs.map(d => d.message)));
+}
+
+module.exports = { MOCK, CTRL, bookmarklet, trackDialogs, stubPrint, newSession, learnAll, autoRun, waitDialog, id };

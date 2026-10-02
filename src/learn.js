@@ -1,4 +1,4 @@
-// Learning steps. type: input | button | select | link, optional: can be skipped.
+// Learning steps. type: input | button | select | link | any, optional: can be skipped.
 const STEPS = [
   { key: 'search', desc: 'the code search field', type: 'input' },
   { key: 'searchBtn', desc: 'the Search button', type: 'button' },
@@ -11,6 +11,7 @@ const STEPS = [
   { key: 'gen', desc: 'the Generate button', type: 'button' },
   { key: 'print', desc: 'the Print button', type: 'button' },
   { key: 'apply', desc: 'the Apply button (in the new tab)', type: 'button' },
+  { key: 'error', desc: 'an error message of the application (only if one is on screen now, otherwise Skip)', type: 'any', optional: true },
 ];
 const K = 'autoLearn';
 const prevCfg = JSON.parse(localStorage.getItem('autoCfg') || 'null');
@@ -25,54 +26,21 @@ if (st && st.done) {
 }
 if (!st) st = { i: 0, steps: {}, done: false };
 
-const old = document.getElementById('__learn');
-if (old) old.remove();
-const b = document.createElement('div');
-b.id = '__learn';
-b.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:2147483647;background:rgb(31,111,178);color:white;font:15px Arial;padding:10px 14px';
-document.body.appendChild(b);
-
+const b = makeBar('__learn');
 const store = () => localStorage.setItem(K, JSON.stringify(st));
 
-// What kind of control is this element: input | select | button | link | other.
-const kindOf = el => {
-  const t = el.tagName.toLowerCase();
-  if (t === 'select') return 'select';
-  if (t === 'textarea') return 'input';
-  if (t === 'input') {
-    if (/^(button|submit|reset|image)$/.test(el.type)) return 'button';
-    return /^(checkbox|radio|file)$/.test(el.type) ? 'other' : 'input';
-  }
-  if (t === 'a') return 'link';
-  return t === 'button' || el.getAttribute('role') === 'button' ? 'button' : 'other';
-};
-// Links and buttons are interchangeable (apps often style one as the other).
-const kindOk = (kind, type) => kind === type || (kind === 'link' && type === 'button') || (kind === 'button' && type === 'link');
-
-// A selector from stable attributes only (used by Auto when the id selector stops matching).
-const altSel = el => {
-  const t = el.tagName.toLowerCase();
-  for (const a of ['name', 'aria-label', 'data-testid', 'data-automation-id', 'title', 'placeholder']) {
-    const v = el.getAttribute(a);
-    if (!v) continue;
-    const s = t + '[' + a + '="' + v.replace(/(["\\])/g, '\\$1') + '"]';
-    try { if (document.querySelectorAll(s).length === 1) return s; } catch (_) {}
-  }
-  return '';
-};
-
 // Everything suspicious about the picked element; the user is asked to confirm when this is not empty.
-const warnings = (el, key, type, sel) => {
+const warnings = (el, key, type, sel, frame) => {
   const w = [];
   const kind = kindOf(el);
   if (!kindOk(kind, type)) w.push('This looks like ' + (kind === 'other' ? 'something else' : 'a ' + kind) + ', but this step expects ' + (type === 'input' ? 'an input' : 'a ' + type) + '. Steps may be shifted by one.');
   for (const [k, c] of Object.entries(st.steps)) {
-    if (c.sel === sel && ![key, k].every(x => x === 'gen' || x === 'print')) {
+    if (c.sel === sel && String(c.frame) === String(frame) && ![key, k].every(x => x === 'gen' || x === 'print')) {
       w.push('The same element was already picked for the "' + k + '" step.');
     }
   }
   let n = 0;
-  try { n = [...document.querySelectorAll(sel)].filter(x => x.offsetParent !== null).length; } catch (_) {}
+  try { n = [...el.ownerDocument.querySelectorAll(sel)].filter(shown).length; } catch (_) {}
   if (n > 1) w.push('The selector matches ' + n + ' visible elements, Auto may click the wrong one.');
   const anchor = el.closest('[id]');
   if (anchor && /\d{5,}|[0-9a-f]{12,}/i.test(anchor.id)) w.push('The id "' + anchor.id + '" looks auto-generated and may change between sessions.');
@@ -85,11 +53,11 @@ const pick = e => {
   e.stopPropagation();
   if (e.type !== 'mousedown' || st.i >= STEPS.length) return;
   const el = e.target.closest('button,a,input,select,textarea,[role=button]') || e.target;
-  const s = STEPS[st.i], key = s.key, sel = cssPath(el);
-  const w = warnings(el, key, s.type, sel);
+  const s = STEPS[st.i], key = s.key, loc = describe(el);
+  const w = warnings(el, key, s.type, loc.sel, loc.frame);
   if (w.length && !confirm('Warning for ' + s.desc + ':\n- ' + w.join('\n- ') + '\n\nAre you sure?')) return;
   // Store the visible text only where Auto needs it (button captions), never e.g. a product name.
-  st.steps[key] = { sel, alt: altSel(el), tag: kindOf(el), text: TXT.includes(key) ? el.textContent.trim() : '' };
+  st.steps[key] = { ...loc, label: labelOf(el), text: TXT.includes(key) ? el.textContent.trim() : '' };
   el.style.outline = '3px solid rgb(46,125,50)';
   setTimeout(() => { el.style.outline = ''; }, 800);
   st.i++;
@@ -97,21 +65,22 @@ const pick = e => {
   draw();
 };
 
-const off = () => {
-  document.removeEventListener('mousedown', pick, true);
-  document.removeEventListener('click', pick, true);
-};
-
-const mk = (t, f) => {
-  const x = document.createElement('button');
-  x.textContent = t;
-  x.style.marginLeft = '10px';
-  x.onclick = f;
-  b.appendChild(x);
-};
+let off = hookPicker(pick);
 
 const back = () => {
   if (st.i > 0) { st.i--; delete st.steps[STEPS[st.i].key]; store(); draw(); }
+};
+
+// Rules every configuration starts with: the pasted line equals the copied one, the append is not empty,
+// a list value is chosen. Rules added later with Validate are kept when learning again.
+const defaultRules = steps => {
+  const loc = (k, label) => ({ frame: steps[k].frame, sel: steps[k].sel, alt: steps[k].alt, label });
+  const rules = [
+    { type: 'equal', a: loc('line1', 'line1'), b: loc('line2', 'line2'), when: 'beforeSave', ci: false, def: true },
+    { type: 'notEmpty', a: loc('line3', 'line3'), when: 'beforeSave', ci: false, def: true },
+  ];
+  if (!steps.user.skipped) rules.push({ type: 'notEmpty', a: loc('user', 'user'), when: 'beforeSave', ci: false, def: true });
+  return rules.concat(((prevCfg && prevCfg.rules) || []).filter(r => !r.def));
 };
 
 // At the end of learning: ask for the data Auto types in and save the configuration.
@@ -127,16 +96,19 @@ const finish = () => {
     if (!u.trim()) { alert('The option name cannot be empty. If there is no list, go Back and skip that step.'); return; }
     userOption = u.trim();
   }
+  const rules = defaultRules(st.steps);
   const lines = STEPS.map((s, i) => {
     const c = st.steps[s.key];
     return (i + 1) + '. ' + s.key + ' - ' + (c.skipped ? 'skipped' : c.tag + (c.text ? ' "' + c.text + '"' : '') + (c.alt ? ' (+ fallback)' : ''));
   });
-  if (!confirm('Check the configuration:\n' + lines.join('\n') + '\n\nAppend text: "' + extra + '"' + (userOption ? '\nList option: "' + userOption + '"' : '') + '\n\nSave it?')) return;
+  if (!confirm('Check the configuration:\n' + lines.join('\n') + '\n\nAppend text: "' + extra + '"' + (userOption ? '\nList option: "' + userOption + '"' : '')
+    + '\n\nValidation rules:\n' + rules.map(ruleText).join('\n') + '\n\nSave it?')) return;
   const confirmSave = confirm('Ask "Save?" before every Save? (OK = yes, Cancel = no)');
   localStorage.setItem('autoCfg', JSON.stringify({
-    v: 2,
+    v: 3,
     steps: st.steps,
     opts: { extraLine: extra, userOption, confirmSave },
+    rules,
   }));
   st.done = true;
   store();
@@ -155,18 +127,16 @@ const draw = () => {
   }
   if (st.i >= STEPS.length) {
     b.innerHTML = '<b>All steps picked.</b> Only saving the settings is left.';
-    mk('Save settings', finish);
-    mk('Back', back);
+    barButton(b, 'Save settings', finish);
+    barButton(b, 'Back', back);
     return;
   }
   const s = STEPS[st.i];
   b.innerHTML = '<b>Learn ' + (st.i + 1) + '/' + STEPS.length + ':</b> Ctrl+click on: <u>' + s.desc + '</u>'
     + (s.optional ? ' (optional)' : '') + ' (a plain click works normally)';
-  if (s.optional) mk('Skip', () => { st.steps[s.key] = { skipped: true }; st.i++; store(); draw(); });
-  mk('Back', back);
-  mk('Quit', () => { off(); b.remove(); });
+  if (s.optional) barButton(b, 'Skip', () => { st.steps[s.key] = { skipped: true }; st.i++; store(); draw(); });
+  barButton(b, 'Back', back);
+  barButton(b, 'Quit', () => { off(); b.remove(); });
 };
 
-document.addEventListener('mousedown', pick, true);
-document.addEventListener('click', pick, true);
 draw();
