@@ -7,4 +7,4 @@ http.createServer((req, res) => {
   if (!p.startsWith(root) || !fs.existsSync(p) || fs.statSync(p).isDirectory()) { res.writeHead(404); return res.end('404'); }
   res.writeHead(200, { 'Content-Type': types[path.extname(p)] || 'application/octet-stream' });
   fs.createReadStream(p).pipe(res);
-}).listen(8000, () => console.log('http://localhost:8000/mock/makieta-oracle.html'));
+}).listen(8000, () => console.log('http://localhost:8000/mock/mock-oracle.html'));

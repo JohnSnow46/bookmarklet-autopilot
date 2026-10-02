@@ -3,7 +3,10 @@ const fs = require('fs'), path = require('path');
 const { minify } = require('terser');
 
 const root = path.join(__dirname, '..');
-const SCRIPTS = ['naucz', 'auto'];
+const SCRIPTS = ['learn', 'auto'];
+
+// Security guard: bookmarklets must never talk to the network or run dynamic code.
+const FORBIDDEN = /\b(fetch|XMLHttpRequest|sendBeacon|WebSocket|EventSource|eval|importScripts)\b|new Function|document\.cookie|import\(/;
 
 function check(name, code) {
   const bad = [];
@@ -11,6 +14,8 @@ function check(name, code) {
   if (code.includes('%')) bad.push('a percent character');
   if (/[\r\n]/.test(code)) bad.push('a newline');
   if (!code.startsWith('javascript:')) bad.push('missing javascript: prefix');
+  const m = code.match(FORBIDDEN);
+  if (m) bad.push('forbidden API: ' + m[0]);
   if (bad.length) throw new Error('Bookmarklet "' + name + '" is invalid: ' + bad.join(', '));
 }
 

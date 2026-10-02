@@ -25,10 +25,10 @@ if (st && st.done) {
 }
 if (!st) st = { i: 0, steps: {}, done: false };
 
-const old = document.getElementById('__naucz');
+const old = document.getElementById('__learn');
 if (old) old.remove();
 const b = document.createElement('div');
-b.id = '__naucz';
+b.id = '__learn';
 b.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:2147483647;background:rgb(31,111,178);color:white;font:15px Arial;padding:10px 14px';
 document.body.appendChild(b);
 
@@ -40,11 +40,9 @@ const pick = e => {
   e.stopPropagation();
   if (e.type !== 'mousedown' || st.i >= STEPS.length) return;
   const el = e.target.closest('button,a,input,select,textarea,[role=button]') || e.target;
-  const tag = el.tagName.toLowerCase();
-  st.steps[STEPS[st.i].key] = {
-    sel: cssPath(el),
-    text: ['input', 'select', 'textarea'].includes(tag) ? '' : el.textContent.trim(),
-  };
+  const key = STEPS[st.i].key;
+  // Store the visible text only where Auto needs it (button captions), never e.g. a product name.
+  st.steps[key] = { sel: cssPath(el), text: TXT.includes(key) ? el.textContent.trim() : '' };
   el.style.outline = '3px solid rgb(46,125,50)';
   setTimeout(() => { el.style.outline = ''; }, 800);
   st.i++;

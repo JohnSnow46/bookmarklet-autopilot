@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const MOCK = '/mock/makieta-oracle.html';
+const MOCK = '/mock/mock-oracle.html';
 const CTRL = { modifiers: ['Control'] };
 
 // Bookmarklet code from dist/ without the javascript: prefix (as the browser would run it).
@@ -30,7 +30,7 @@ const id = s => '[id="' + s + '"]';
 // Full learning run on the mock: Ctrl+click teaches, a plain click moves the process on.
 async function learnAll(page, context, { code = '5901234123457', skipUser = false, variant = '' } = {}) {
   await page.goto(MOCK + (variant ? '?variant=' + variant : ''));
-  await page.evaluate(bookmarklet('naucz'));
+  await page.evaluate(bookmarklet('learn'));
 
   await page.locator(id('pt1:r1:0:it1::content')).click(CTRL);
   await page.locator('[data-c="' + code + '"]').click();
@@ -42,7 +42,7 @@ async function learnAll(page, context, { code = '5901234123457', skipUser = fals
   await page.locator(id('pt1:r2:0:it1::content')).click(CTRL);
   await page.locator(id('pt1:r2:0:it2::content')).click(CTRL);
   await page.locator(id('pt1:r2:0:it3::content')).click(CTRL);
-  if (skipUser) await page.locator('[id="__naucz"] button', { hasText: 'Skip' }).click();
+  if (skipUser) await page.locator('[id="__learn"] button', { hasText: 'Skip' }).click();
   else await page.locator(id('pt1:r2:0:soc1::content')).click(CTRL);
   await page.locator(id('pt1:r2:0:it2::content')).fill(await page.locator(id('pt1:r2:0:it1::content')).inputValue());
   await page.locator(id('pt1:r2:0:it3::content')).fill('appended');
@@ -60,12 +60,12 @@ async function learnAll(page, context, { code = '5901234123457', skipUser = fals
   await gen.click();
   const popup = await popupP;
   await popup.waitForLoadState();
-  await popup.evaluate(bookmarklet('naucz')); // continue learning in the new tab (the confirm is accepted)
+  await popup.evaluate(bookmarklet('learn')); // continue learning in the new tab (the confirm is accepted)
   const apply = popup.locator(id('pt1:p1:cb_apply'));
   await apply.waitFor({ timeout: 15000 });
   await apply.click(CTRL);
-  await popup.locator('[id="__naucz"] button', { hasText: 'Save settings' }).click();
-  await popup.locator('[id="__naucz"]').getByText('Done').waitFor();
+  await popup.locator('[id="__learn"] button', { hasText: 'Save settings' }).click();
+  await popup.locator('[id="__learn"]').getByText('Done').waitFor();
   await popup.close();
 }
 
