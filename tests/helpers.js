@@ -9,11 +9,12 @@ const bookmarklet = name =>
   fs.readFileSync(path.join(__dirname, '..', 'dist', name + '.txt'), 'utf8').replace(/^javascript:/, '');
 
 // Records every dialog (alert/confirm/prompt) and accepts it.
-// answers: { message fragment: answer for a prompt }
+// answers: { message fragment: answer for a prompt, or false to dismiss the dialog }
 function trackDialogs(context, dialogs, answers = {}) {
   const hook = page => page.on('dialog', d => {
     dialogs.push({ type: d.type(), message: d.message() });
     const k = Object.keys(answers).find(x => d.message().includes(x));
+    if (k !== undefined && answers[k] === false) return d.dismiss();
     return d.accept(k === undefined ? undefined : answers[k]);
   });
   context.pages().forEach(hook);
@@ -28,8 +29,9 @@ async function stubPrint(context) {
 const id = s => '[id="' + s + '"]';
 
 // Full learning run on the mock: Ctrl+click teaches, a plain click moves the process on.
-async function learnAll(page, context, { code = '5901234123457', skipUser = false, variant = '' } = {}) {
+async function learnAll(page, context, { code = '5901234123457', skipUser = false, variant = '', prep, expectDone = true } = {}) {
   await page.goto(MOCK + (variant ? '?variant=' + variant : ''));
+  if (prep) await prep(page);
   await page.evaluate(bookmarklet('learn'));
 
   await page.locator(id('pt1:r1:0:it1::content')).click(CTRL);
@@ -65,7 +67,8 @@ async function learnAll(page, context, { code = '5901234123457', skipUser = fals
   await apply.waitFor({ timeout: 15000 });
   await apply.click(CTRL);
   await popup.locator('[id="__learn"] button', { hasText: 'Save settings' }).click();
-  await popup.locator('[id="__learn"]').getByText('Done').waitFor();
+  if (expectDone) await popup.locator('[id="__learn"]').getByText('Done').waitFor();
+  else await popup.waitForTimeout(500); // let the (rejected) dialogs finish
   await popup.close();
 }
 

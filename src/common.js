@@ -29,7 +29,8 @@ const setVal = (el, v) => {
 const find = (cfg, k, d = document) => {
   const c = cfg[k];
   if (!c || c.skipped) throw new Error('Missing in configuration: ' + k);
-  const el = d.querySelector(c.sel);
+  // main selector first, then the fallback built from stable attributes
+  const el = d.querySelector(c.sel) || (c.alt && d.querySelector(c.alt));
   if (!el || el.disabled || el.offsetParent === null) return null;
   if (TXT.includes(k) && c.text && el.textContent.trim() !== c.text) return null;
   return el;

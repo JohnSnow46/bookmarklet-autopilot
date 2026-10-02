@@ -23,7 +23,7 @@ in the browser's own `localStorage`. Nothing is sent anywhere.
 
 | Name | What it does |
 | --- | --- |
-| **Learn** | Walks you through the process step by step. Ctrl+click remembers an element, a plain click works normally. Has Back, Skip (optional steps) and Quit. At the end it asks what text to append and which list option to pick, so nothing is hard-coded. |
+| **Learn** | Walks you through the process step by step. Ctrl+click remembers an element, a plain click works normally. Warns ("Are you sure?") about a wrong element type, a duplicate pick, an ambiguous selector or an auto-generated-looking id, and shows a summary before saving. Has Back, Skip (optional steps) and Quit. At the end it asks what text to append and which list option to pick, so nothing is hard-coded. |
 | **Auto** | Runs the whole process from the saved configuration: waits for elements, fills fields with real framework events, optionally asks "Save?", clicks Generate → Print, takes over the new tab and clicks Apply. |
 | **Validate** *(planned)* | Same Ctrl+click idea, but for rules ("field A equals field B", "not empty", …) that Auto checks before saving. |
 | **Show / Export** *(planned)* | Show the saved configuration; export an Auto bookmarklet with the configuration embedded. |
@@ -80,7 +80,7 @@ The build wraps `common.js` + a script in an IIFE, minifies it with terser and *
 
 - [x] 1. Skeleton, shared helpers, build with character checks, first end-to-end test
 - [x] 2. Flexible learning steps (types, optional, Skip), configurable append text and list option
-- [ ] 3. Validation while learning (wrong element type, duplicates, ambiguous selectors, summary)
+- [x] 3. Validation while learning (wrong element type, duplicates, ambiguous selectors, generated-looking ids, summary, fallback selectors)
 - [ ] 4. Generic validation rules (Ctrl+click picks the fields) and error detection after Save
 - [ ] 5. Mock variants: iframe, full page reload; script support for them
 - [ ] 6. Show and Export (Auto with embedded configuration)
