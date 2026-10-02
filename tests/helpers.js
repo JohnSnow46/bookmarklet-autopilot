@@ -6,8 +6,9 @@ const CTRL = { modifiers: ['Control'] };
 const id = s => '[id="' + s + '"]';
 
 // Bookmarklet code from dist/ without the javascript: prefix (as the browser would run it).
-const bookmarklet = name =>
-  fs.readFileSync(path.join(__dirname, '..', 'dist', name + '.txt'), 'utf8').replace(/^javascript:/, '');
+let source = null; // optional override, e.g. the links of the installer page
+const useSource = fn => { source = fn; };
+const bookmarklet = name => (source ? source(name) : fs.readFileSync(path.join(__dirname, '..', 'dist', name + '.txt'), 'utf8')).replace(/^javascript:/, '');
 
 // Records every dialog (alert/confirm/prompt) and accepts it.
 // answers: { message fragment: answer for a prompt, or false to dismiss the dialog }
@@ -127,4 +128,4 @@ async function waitDialog(dialogs, prefix, timeout = 30000) {
   throw new Error('no dialog starting with "' + prefix + '"; got: ' + JSON.stringify(dialogs.map(d => d.message)));
 }
 
-module.exports = { MOCK, CTRL, bookmarklet, trackDialogs, stubPrint, newSession, learnAll, autoRun, waitDialog, id };
+module.exports = { useSource, MOCK, CTRL, bookmarklet, trackDialogs, stubPrint, newSession, learnAll, autoRun, waitDialog, id };

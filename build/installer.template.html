@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Oracle Bookmarklets – installer</title>
+<style>
+  :root {
+    --bg: #f4f6f8; --panel: #ffffff; --line: #d3dae1; --text: #1d2730; --muted: #5b6875;
+    --accent: #1f6fb2; --accent-text: #ffffff; --ok: #2e7d32; --code: #f0f3f6;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #14191e; --panel: #1c232a; --line: #33404b; --text: #e6ebf0; --muted: #9aa8b5;
+      --accent: #5aa6e6; --accent-text: #0b1620; --ok: #6fcf76; --code: #11161b; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.55 system-ui, "Segoe UI", Arial, sans-serif; }
+  main { max-width: 860px; margin: 0 auto; padding: 24px 16px 64px; }
+  h1 { font-size: 26px; margin: 0 0 4px; }
+  h2 { font-size: 19px; margin: 32px 0 10px; }
+  p { margin: 8px 0; }
+  .muted { color: var(--muted); }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; margin: 12px 0; }
+  .row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+  .row h3 { margin: 0; font-size: 17px; flex: 1 1 140px; }
+  a.bm { display: inline-block; padding: 7px 14px; border: 2px dashed var(--accent); border-radius: 8px; color: var(--accent);
+    font-weight: 600; text-decoration: none; cursor: grab; }
+  button { font: inherit; padding: 7px 14px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); color: var(--text); cursor: pointer; }
+  button.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+  button:focus-visible, a:focus-visible, summary:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+  .hash { font: 12px ui-monospace, Consolas, monospace; color: var(--muted); word-break: break-all; margin-top: 8px; }
+  details { margin-top: 8px; }
+  summary { cursor: pointer; color: var(--accent); }
+  pre { background: var(--code); border: 1px solid var(--line); border-radius: 8px; padding: 10px; overflow: auto; max-height: 260px;
+    font: 12px/1.4 ui-monospace, Consolas, monospace; white-space: pre-wrap; word-break: break-all; }
+  ol li { margin: 6px 0; }
+  code { background: var(--code); padding: 1px 5px; border-radius: 4px; }
+  .note { border-left: 4px solid var(--accent); padding: 4px 12px; margin: 12px 0; }
+  .ok { color: var(--ok); font-weight: 600; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Oracle Bookmarklets</h1>
+  <p class="muted">Automate the repetitive scan → search → fill → save → print routine with plain browser bookmarks. No installation, no extensions.</p>
+
+  <h2>1. Check that bookmarklets work on your computer</h2>
+  <div class="card">
+    <p>Create a bookmark whose URL is exactly <code>javascript:alert('ok')</code> and click it on any web page.</p>
+    <p>A dialog saying <b>ok</b> means you can continue. If nothing happens, your IT policy blocks bookmarklets: stop here, that is a decision, not a bug.</p>
+    <p class="row"><button class="primary" data-copy-text="javascript:alert('ok')">Copy the test code</button><span class="ok" id="copied-test"></span></p>
+  </div>
+
+  <h2>2. Add the bookmarklets</h2>
+  <p>Either <b>drag</b> a button to the bookmarks bar (<code>Ctrl+Shift+B</code> shows the bar), or press <b>Copy code</b>, create a new bookmark and paste the whole line into its URL field.</p>
+{{ITEMS}}
+
+  <h2>3. Use them</h2>
+  <ol>
+    <li>Open the application page and click <b>Learn</b>. Follow the bar at the top: <b>Ctrl+click</b> each element it asks for; a plain click works normally, so you can do the real process while teaching it. Use <b>Skip</b> for optional steps, <b>Back</b> to undo.</li>
+    <li>Check the summary, type the text to append and the list option, save.</li>
+    <li>Optional: use <b>Validate</b> to add checks (for example "this field equals that field").</li>
+    <li>Every day: scan a code into the search field, click <b>Auto</b>, confirm the system print dialog.</li>
+    <li>If the application reloads the whole page between steps, click <b>Auto</b> again after each reload; it continues where it stopped.</li>
+    <li>If the browser blocks the print tab, allow pop-ups for the site.</li>
+  </ol>
+  <div class="note">Practise first on the <a href="mock/mock-oracle.html">test mock</a>. It imitates the process and shows an event log. Variants: <a href="mock/mock-oracle.html?variant=nolist">no User list</a>, <a href="mock/mock-oracle.html?variant=iframe">form in an iframe</a>, <a href="mock/mock-oracle.html?variant=reload">full page reloads</a>.</div>
+
+  <h2>Safety</h2>
+  <div class="card">
+    <p>A bookmarklet runs with the full rights of the page you click it on, so read what you paste. The code is short and never talks to the network; the build refuses to produce code that does. Compare the SHA-256 of what you copied with the value shown under each button.</p>
+    <p>Get your manager's / IT's approval before using automation on a company system. Nothing learned is ever sent anywhere: it lives in this browser's <code>localStorage</code>. Never share a configuration export outside the company.</p>
+  </div>
+  <p class="muted">Source and documentation: see the repository README and <code>docs/SECURITY.md</code>.</p>
+</main>
+<script>
+  function copyText(text) {
+    if (navigator.clipboard && navigator.clipboard.writeText) return navigator.clipboard.writeText(text);
+    return new Promise(function (resolve, reject) {
+      var t = document.createElement('textarea');
+      t.value = text; document.body.appendChild(t); t.select();
+      try { document.execCommand('copy') ? resolve() : reject(); } catch (e) { reject(e); } finally { t.remove(); }
+    });
+  }
+  function flash(btn, msg) { var old = btn.textContent; btn.textContent = msg; setTimeout(function () { btn.textContent = old; }, 1600); }
+  document.querySelectorAll('[data-copy]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      copyText(document.getElementById(btn.dataset.copy).textContent).then(function () { flash(btn, 'Copied!'); }, function () { flash(btn, 'Select the code below and copy it'); });
+    });
+  });
+  document.querySelectorAll('[data-copy-text]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      copyText(btn.dataset.copyText).then(function () { flash(btn, 'Copied!'); }, function () { flash(btn, 'Copy failed'); });
+    });
+  });
+  document.querySelectorAll('a.bm').forEach(function (a) {
+    a.addEventListener('click', function (e) { e.preventDefault(); alert('Drag this button to your bookmarks bar instead of clicking it here.'); });
+  });
+</script>
+</body>
+</html>

@@ -1,0 +1,284 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Oracle mock – automation test</title>
+<style>
+  :root {
+    --bar: #31465a; --bar-text: #e8eef3; --bg: #eef1f4; --panel: #ffffff;
+    --line: #c9d1d9; --text: #1d2730; --muted: #5b6875; --accent: #1f6fb2;
+    --ok: #2e7d32; --err: #b3261e;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.5 "Segoe UI", Tahoma, Arial, sans-serif; color: var(--text); background: var(--bg); }
+  header { background: var(--bar); color: var(--bar-text); padding: 10px 18px; font-size: 15px; }
+  header small { opacity: .7; margin-left: 8px; }
+  .wrap { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 16px; padding: 16px; max-width: 1200px; margin: 0 auto; }
+  @media (max-width: 860px) { .wrap { grid-template-columns: 1fr; } }
+  .panel { background: var(--panel); border: 1px solid var(--line); padding: 16px; position: relative; min-height: 120px; }
+  h2 { font-size: 16px; margin: 0 0 12px; }
+  h3 { font-size: 14px; margin: 16px 0 6px; }
+  label { display: block; color: var(--muted); font-size: 13px; margin: 10px 0 3px; }
+  input, textarea, select { font: inherit; padding: 5px 7px; border: 1px solid #9aa7b3; width: 100%; max-width: 420px; background: #fff; }
+  input[readonly] { background: #f3f5f7; }
+  textarea { height: 56px; }
+  button { font: inherit; padding: 5px 14px; border: 1px solid #7f8d99; background: linear-gradient(#fdfdfd, #e3e7eb); cursor: pointer; margin-top: 10px; }
+  button:disabled { opacity: .55; cursor: default; }
+  button:focus-visible, a:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  table { border-collapse: collapse; margin-top: 12px; width: 100%; }
+  th, td { border: 1px solid var(--line); padding: 5px 8px; text-align: left; }
+  th { background: #e4e9ee; font-weight: 600; }
+  a.xResult { color: var(--accent); }
+  .msg { margin-top: 10px; padding: 6px 10px; border-left: 4px solid; }
+  .msg.ok { border-color: var(--ok); background: #edf7ee; }
+  .msg.err { border-color: var(--err); background: #fbeceb; }
+  .busy { position: absolute; inset: 0; background: rgba(255,255,255,.75); display: none; align-items: center; justify-content: center; color: var(--muted); }
+  .busy.on { display: flex; }
+  .codes button { margin: 3px 4px 0 0; padding: 2px 8px; font-size: 13px; }
+  #log { font-size: 12px; max-height: 260px; overflow: auto; background: #f7f9fa; border: 1px solid var(--line); padding: 6px; margin: 0; white-space: pre-wrap; }
+  .doc { border: 1px solid var(--line); padding: 20px; max-width: 520px; background: #fff; }
+  @media print { header, aside, button, .busy { display: none !important; } .wrap { display: block; padding: 0; } .panel { border: 0; } }
+</style>
+</head>
+<body>
+<header>Warehouse system <small>test mock, not the real Oracle</small></header>
+<div class="wrap">
+  <main class="panel">
+    <div id="view"></div>
+    <div class="busy" id="busy">Processing…</div>
+  </main>
+  <aside class="panel">
+    <h2>Test panel</h2>
+    <div id="sideMain">
+      <div class="codes">
+        Click a code to type it like a scanner:<br>
+        <span id="codes"></span>
+      </div>
+    </div>
+    <h3>Log</h3>
+    <pre id="log"></pre>
+  </aside>
+</div>
+
+<script>
+/* ---------- test data ---------- */
+const PRODUCTS = {
+  "5901234123457": { name: "Vacuum R10 – main board", line: "PCB-R10-MAIN rev.B" },
+  "5909876543210": { name: "Lidar module LDS-3", line: "LDS-3 SN 22-04419" },
+  "5900000000017": { name: "Battery 14.4V 5200mAh", line: "BAT-144-52 batch 07/26" }
+};
+const USERS = [["u1", "Doe Jane"], ["u2", "Roe John"], ["u3", "You (test)"]];
+
+/* ---------- helpers ---------- */
+const $ = id => document.getElementById(id);
+const view = $("view");
+const params = new URLSearchParams(location.search);
+/* mock variants: ?variant=nolist,iframe,reload,mangle,saveerror (comma separated)
+   nolist: no User list | iframe: the form lives in an iframe | reload: full page reload between steps
+   mangle: the pasted line gets upper-cased by the "framework" | saveerror: Save always fails */
+const variants = (params.get("variant") || "").split(",");
+const has = v => variants.includes(v);
+function log(t) { const l = $("log"); l.textContent = new Date().toLocaleTimeString() + "  " + t + "\n" + l.textContent; }
+function rnd(a, b) { return a + Math.random() * (b - a); }
+function busy(ms) {
+  $("busy").classList.add("on");
+  return new Promise(r => setTimeout(() => { $("busy").classList.remove("on"); r(); }, ms));
+}
+function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
+
+/* Framework-like model: values only reach it through input/change events.
+   If a script sets plain .value without events, Save fails – like in a real framework. */
+let model = {};
+let formDoc = null; /* document that holds the form: the iframe's when ?variant=iframe */
+const $f = id => (formDoc || document).getElementById(id);
+function bind(id, key) {
+  const el = $f(id);
+  const upd = () => { model[key] = el.value; };
+  el.addEventListener("input", upd);
+  el.addEventListener("change", upd);
+  upd();
+}
+
+/* ---------- views ---------- */
+function go(viewName, extra) {
+  /* full page reload: the state travels in the URL */
+  location.href = location.pathname + "?variant=" + encodeURIComponent(params.get("variant") || "") + "&view=" + viewName + (extra || "");
+}
+
+function renderSearch() {
+  model = {};
+  formDoc = null;
+  view.innerHTML = `
+    <h2>Product search</h2>
+    <label for="pt1:r1:0:it1::content">Product code</label>
+    <input id="pt1:r1:0:it1::content" autocomplete="off">
+    <button id="pt1:r1:0:cb1" type="button">Search</button>
+    <div id="pt1:r1:0:res"></div>`;
+  const inp = $("pt1:r1:0:it1::content");
+  bind("pt1:r1:0:it1::content", "code");
+  inp.addEventListener("keydown", e => { if (e.key === "Enter") doSearch(); });
+  $("pt1:r1:0:cb1").addEventListener("click", doSearch);
+  inp.focus();
+}
+
+async function doSearch() {
+  const res = $("pt1:r1:0:res");
+  res.innerHTML = "";
+  const code = (model.code || "").trim();
+  log("Search: " + (code || "(empty)"));
+  await busy(rnd(600, 1400));
+  const p = PRODUCTS[code];
+  if (!p) { res.innerHTML = `<div class="msg err">No product found for code "${esc(code)}".</div>`; return; }
+  if (has("reload")) return go("results", "&code=" + encodeURIComponent(code));
+  showResults(code);
+}
+
+function showResults(code) {
+  const res = $("pt1:r1:0:res");
+  const p = PRODUCTS[code];
+  res.innerHTML = `
+    <table><tr><th>Code</th><th>Name</th></tr>
+    <tr><td>${esc(code)}</td><td><a href="#" class="xResult" id="pt1:r1:0:t1:0:cl1">${esc(p.name)}</a></td></tr></table>`;
+  $("pt1:r1:0:t1:0:cl1").addEventListener("click", async e => {
+    e.preventDefault();
+    log("Selected: " + p.name);
+    await busy(rnd(700, 1600));
+    if (has("reload")) return go("form", "&code=" + encodeURIComponent(code));
+    renderForm(code, p);
+  });
+}
+
+function renderForm(code, p) {
+  model = {};
+  const html = `
+    <h2>Form: ${esc(p.name)}</h2>
+    <label for="pt1:r2:0:it1::content">Line 1 (to copy)</label>
+    <input id="pt1:r2:0:it1::content" readonly value="${esc(p.line)}">
+    <label for="pt1:r2:0:it2::content">Line 2 (paste line 1)</label>
+    <input id="pt1:r2:0:it2::content">
+    <label for="pt1:r2:0:it3::content">Line 3 (append)</label>
+    <textarea id="pt1:r2:0:it3::content"></textarea>
+    ${has("nolist") ? "" : `<label for="pt1:r2:0:soc1::content">User</label>
+    <select id="pt1:r2:0:soc1::content">
+      <option value="">– select –</option>
+      ${USERS.map(([v, t]) => `<option value="${v}">${esc(t)}</option>`).join("")}
+    </select>`}
+    <br><button id="pt1:r2:0:cb_save" type="button">Save</button>
+    <div id="pt1:r2:0:msg"></div>`;
+  if (has("iframe")) {
+    view.innerHTML = '<iframe id="pt1:r2:0:frm" style="width:100%;height:470px;border:1px solid var(--line);background:#fff"></iframe>';
+    const fd = $("pt1:r2:0:frm").contentDocument;
+    fd.open();
+    fd.write('<!doctype html><html><head><meta charset="utf-8"><style>' + document.querySelector("style").textContent + '</style></head><body style="padding:12px">' + html + '</body></html>');
+    fd.close();
+    formDoc = fd;
+  } else {
+    view.innerHTML = html;
+    formDoc = null;
+  }
+  bind("pt1:r2:0:it1::content", "line1");
+  bind("pt1:r2:0:it2::content", "line2");
+  bind("pt1:r2:0:it3::content", "line3");
+  if (!has("nolist")) bind("pt1:r2:0:soc1::content", "user");
+  $f("pt1:r2:0:cb_save").addEventListener("click", () => doSave(code));
+  if (has("mangle")) $f("pt1:r2:0:it2::content").addEventListener("change", e => { e.target.value = e.target.value.toUpperCase(); });
+}
+
+async function doSave(code) {
+  const msg = $f("pt1:r2:0:msg");
+  const errors = [];
+  if (model.line2 !== model.line1) errors.push("Line 2 must be a copy of line 1.");
+  if (!(model.line3 || "").trim()) errors.push("Line 3 is empty.");
+  if (!has("nolist") && !model.user) errors.push("No user selected.");
+  if (errors.length) {
+    msg.innerHTML = `<div class="msg err">${errors.join("<br>")}</div>`;
+    log("Save rejected: " + errors.join(" "));
+    return;
+  }
+  await busy(rnd(900, 1800));
+  if (has("saveerror")) {
+    msg.innerHTML = '<div class="msg err">Save failed: ORA-00001 unique constraint violated (simulated)</div>';
+    log("Save failed (simulated)");
+    return;
+  }
+  const doc = Math.floor(100000 + Math.random() * 900000);
+  log(`Saved document ${doc} (code ${code}; line3: "${model.line3}"; user: ${model.user || "-"})`);
+  if (has("reload")) return go("saved", "&doc=" + doc + "&code=" + encodeURIComponent(code));
+  renderSaved(code, doc);
+}
+
+function renderSaved(code, doc) {
+  formDoc = null;
+  view.innerHTML = `
+    <h2>Document ${doc}</h2>
+    <div class="msg ok">Saved. Generate the printout.</div>
+    <button id="pt1:r3:0:cb_gen" type="button">Generate</button>
+    <button id="pt1:r3:0:cb_new" type="button">New scan</button>`;
+  const gen = $("pt1:r3:0:cb_gen");
+  let ready = false;
+  gen.addEventListener("click", () => {
+    if (ready) {
+      log("Print: opening new tab");
+      const w = window.open(location.pathname + "?print=" + doc + "&kod=" + encodeURIComponent(code), "_blank");
+      if (!w) log("WARNING: the browser blocked the new tab");
+      return;
+    }
+    gen.disabled = true;
+    gen.textContent = "Generating…";
+    log("Generating printout…");
+    setTimeout(() => { gen.disabled = false; gen.textContent = "Print"; ready = true; log("Ready: the button changed to Print"); }, rnd(1500, 3000));
+  });
+  $("pt1:r3:0:cb_new").addEventListener("click", renderSearch);
+}
+
+async function renderPrint() {
+  $("sideMain").style.display = "none";
+  const doc = params.get("print"), code = params.get("kod") || "";
+  const p = PRODUCTS[code] || { name: "?", line: "?" };
+  view.innerHTML = `<h2>Print preview – document ${esc(doc)}</h2><p>Preparing report…</p>`;
+  log("Print tab opened");
+  await busy(rnd(1200, 2500));
+  view.innerHTML = `
+    <h2>Print preview – document ${esc(doc)}</h2>
+    <div class="doc">
+      <strong>Document ${esc(doc)}</strong><br>
+      Product: ${esc(p.name)}<br>
+      Code: ${esc(code)}<br>
+      ${esc(p.line)}<br>
+      Date: ${new Date().toLocaleString()}
+    </div>
+    <button id="pt1:p1:cb_apply" type="button">Apply</button>`;
+  $("pt1:p1:cb_apply").addEventListener("click", () => { log("Apply → printing"); window.print(); });
+}
+
+/* ---------- test panel ---------- */
+function fillCodeLikeScanner(code) {
+  const inp = $("pt1:r1:0:it1::content");
+  if (!inp) { renderSearch(); return fillCodeLikeScanner(code); }
+  inp.value = code;
+  inp.dispatchEvent(new Event("input", { bubbles: true }));
+  inp.focus();
+  log("Typed code: " + code);
+}
+$("codes").innerHTML = Object.keys(PRODUCTS).map(c => `<button type="button" data-c="${c}">${c}</button>`).join("")
+  + `<button type="button" data-c="1111111111111">unknown</button>`;
+$("codes").addEventListener("click", e => { const c = e.target.dataset.c; if (c) fillCodeLikeScanner(c); });
+
+/* ---------- start ---------- */
+if (params.has("print")) renderPrint();
+else if (params.get("view") === "form" && PRODUCTS[params.get("code")]) renderForm(params.get("code"), PRODUCTS[params.get("code")]);
+else if (params.get("view") === "saved") renderSaved(params.get("code"), params.get("doc"));
+else {
+  renderSearch();
+  if (params.get("view") === "results") {
+    const code = params.get("code");
+    $("pt1:r1:0:it1::content").value = code;
+    model.code = code;
+    showResults(code);
+  }
+}
+if (location.protocol === "file:") log("WARNING: opened as a file. New-tab handling only works over http://localhost.");
+</script>
+</body>
+</html>
