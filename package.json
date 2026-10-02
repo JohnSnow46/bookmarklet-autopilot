@@ -1,0 +1,16 @@
+{
+  "name": "bookmarklet-autopilot",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Record a repetitive routine in any web app once, then replay it with one click, using only browser bookmarklets",
+  "scripts": {
+    "build": "node build/build.js",
+    "serve": "node build/serve.js",
+    "test": "playwright test",
+    "shots": "node build/guide-shots.js"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.63.0",
+    "terser": "^5.51.2"
+  }
+}

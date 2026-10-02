@@ -1,0 +1,91 @@
+// Sources (src/*.js) → one-line bookmarklets in dist/*.txt
+const fs = require('fs'), path = require('path');
+const crypto = require('crypto');
+const { minify } = require('terser');
+
+const root = path.join(__dirname, '..');
+const SCRIPTS = ['record', 'play', 'series', 'dryrun', 'learn', 'auto', 'validate', 'check', 'show', 'export']; // auto and play must come before export
+
+// Bookmarklets built from another source with a constant in front: { name: [source, prefix] }.
+const VARIANTS = { series: ['play', "const PLAY_MODE='series';"], dryrun: ['play', "const PLAY_MODE='dry';"] };
+
+// Security guard: bookmarklets must never talk to the network or run dynamic code.
+const FORBIDDEN = /\b(fetch|XMLHttpRequest|sendBeacon|WebSocket|EventSource|eval|importScripts)\b|new Function|document\.cookie|import\(/;
+
+function check(name, code) {
+  const bad = [];
+  if (code.includes('#')) bad.push('a hash character');
+  if (code.includes('%')) bad.push('a percent character');
+  if (/[\r\n]/.test(code)) bad.push('a newline');
+  if (!code.startsWith('javascript:')) bad.push('missing javascript: prefix');
+  const m = code.match(FORBIDDEN);
+  if (m) bad.push('forbidden API: ' + m[0]);
+  if (bad.length) throw new Error('Bookmarklet "' + name + '" is invalid: ' + bad.join(', '));
+}
+
+async function buildOne(name, built) {
+  const common = fs.readFileSync(path.join(root, 'src', 'common.js'), 'utf8');
+  const [src, prefix] = VARIANTS[name] || [name, ''];
+  let body = prefix + '\n' + fs.readFileSync(path.join(root, 'src', src + '.js'), 'utf8');
+  // Export embeds the finished Auto and Play bookmarklets (without the javascript: prefix) as strings.
+  const embed = n => JSON.stringify(built[n].slice('javascript:'.length));
+  body = body.replace('__AUTO__', () => (built.auto ? embed('auto') : 'null')).replace('__PLAY__', () => (built.play ? embed('play') : 'null'));
+  const wrapped = '(()=>{\n' + common + '\n' + body + '\n})();';
+  const out = await minify(wrapped, {
+    compress: { passes: 2 },
+    mangle: true,
+    format: { ascii_only: true, comments: false, semicolons: true },
+  });
+  const code = 'javascript:' + out.code;
+  check(name, code);
+  return code;
+}
+
+// What the installer page says about each bookmarklet.
+const INFO = {
+  record: ['Record', 'The easy way: do the routine once, normally. Every click, typed value and choice is recorded.'],
+  play: ['Play', 'Repeats the recording. Enter the input first (type or scan it), then click Play.'],
+  series: ['Series', 'Many items in a row: after each run it waits for the next input and runs again, until you press Stop.'],
+  dryrun: ['Dry run', 'Safe first test: shows which recorded steps it can find on the current screen. Clicks and types nothing.'],
+  learn: ['Learn', 'Advanced: teach a fixed lookup, fill, save and print workflow step by step with Ctrl+click.'],
+  auto: ['Auto', 'Advanced: runs what Learn taught.'],
+  validate: ['Validate', 'Add checks, for example "this field equals that field" or "not empty".'],
+  check: ['Check', 'Run the "manual only" checks on the current page.'],
+  show: ['Show', 'Show what has been learned or recorded, the run log, and change your profiles.'],
+  export: ['Export', 'Create a Play (or Auto) bookmarklet with your recording built in, to share or to use on another computer.'],
+};
+const esc = t => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+// docs/index.html (GitHub Pages installer) with a draggable link, a copy button and a SHA-256 per bookmarklet.
+function installer(built) {
+  const items = SCRIPTS.map(n => {
+    const code = built[n], [title, text] = INFO[n];
+    const sha = crypto.createHash('sha256').update(code).digest('hex');
+    return [
+      '  <div class="card">',
+      '    <div class="row"><h3>' + title + '</h3><a class="bm" href="' + esc(code) + '">' + title + '</a>'
+        + '<button class="primary" data-copy="code-' + n + '">Copy code</button></div>',
+      '    <p class="muted">' + text + '</p>',
+      '    <details><summary>View the code (' + code.length + ' characters)</summary><pre id="code-' + n + '">' + esc(code) + '</pre></details>',
+      '    <div class="hash">SHA-256: ' + sha + '</div>',
+      '  </div>',
+    ].join('\n');
+  }).join('\n');
+  const tpl = fs.readFileSync(path.join(__dirname, 'installer.template.html'), 'utf8');
+  fs.mkdirSync(path.join(root, 'docs', 'mock'), { recursive: true });
+  fs.writeFileSync(path.join(root, 'docs', 'index.html'), tpl.replace('{{ITEMS}}', () => items));
+  fs.copyFileSync(path.join(root, 'mock', 'demo-app.html'), path.join(root, 'docs', 'mock', 'demo-app.html'));
+  fs.writeFileSync(path.join(root, 'docs', '.nojekyll'), '');
+  console.log('docs/index.html  (installer)');
+}
+
+(async () => {
+  fs.mkdirSync(path.join(root, 'dist'), { recursive: true });
+  const built = {};
+  for (const n of SCRIPTS) {
+    const code = built[n] = await buildOne(n, built);
+    fs.writeFileSync(path.join(root, 'dist', n + '.txt'), code);
+    console.log('dist/' + n + '.txt  ' + code.length + ' chars');
+  }
+  installer(built);
+})().catch(e => { console.error('BUILD ERROR: ' + e.message); process.exit(1); });

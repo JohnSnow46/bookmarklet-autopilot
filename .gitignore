@@ -1,0 +1,12 @@
+node_modules/
+test-results/
+playwright-report/
+# exports/captures from a real application - never commit these
+*.har
+*.mhtml
+capture-*.html
+export-*.json
+export-dump-*
+capture-*
+screenshots/
+*.png.private
