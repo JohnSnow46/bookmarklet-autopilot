@@ -2,7 +2,7 @@
   "name": "oracle-bookmarklety",
   "version": "0.1.0",
   "private": true,
-  "description": "Bookmarklety automatyzujące wprowadzanie produktów w webowym Oracle (Naucz / Auto / Pokaż / Eksport)",
+  "description": "Bookmarklets that automate repetitive product entry in a web-based Oracle app (Learn / Auto / Validate)",
   "scripts": {
     "build": "node build/build.js",
     "serve": "node build/serve.js",

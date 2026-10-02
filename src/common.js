@@ -1,6 +1,6 @@
-// Wspólne narzędzia. Build dokleja ten plik przed każdym skryptem (wszystko w jednym zasięgu).
-const H = /*@__PURE__*/String.fromCharCode(35); // znak kratki bez wpisywania go w kodzie
-const TXT = ['searchBtn', 'save', 'gen', 'print', 'apply']; // kroki rozpoznawane także po tekście przycisku
+// Shared helpers. The build prepends this file to every script (one shared scope).
+const H = /*@__PURE__*/String.fromCharCode(35); // the hash character without typing it in the source
+const TXT = ['searchBtn', 'save', 'gen', 'print', 'apply']; // steps that are also recognised by their button text
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
@@ -12,10 +12,10 @@ const waitFor = async (fn, what, t = 20000) => {
     if (r) return r;
     await sleep(150);
   }
-  throw new Error('Nie pojawił się element: ' + what);
+  throw new Error('Element did not appear: ' + what);
 };
 
-// Ustawia wartość natywnym setterem i wysyła zdarzenia, które widzi framework.
+// Sets the value with the native setter and fires the events the framework listens to.
 const setVal = (el, v) => {
   const p = el instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype
     : el instanceof HTMLSelectElement ? HTMLSelectElement.prototype
@@ -25,21 +25,21 @@ const setVal = (el, v) => {
   el.dispatchEvent(new Event('change', { bubbles: true }));
 };
 
-// Znajduje widoczny, aktywny element zapamiętany pod kluczem k (null, jeśli go nie ma).
+// Finds the visible, enabled element stored under key k (null if it is not there).
 const find = (cfg, k, d = document) => {
   const c = cfg[k];
-  if (!c) throw new Error('Brak w konfiguracji: ' + k);
+  if (!c || c.skipped) throw new Error('Missing in configuration: ' + k);
   const el = d.querySelector(c.sel);
   if (!el || el.disabled || el.offsetParent === null) return null;
   if (TXT.includes(k) && c.text && el.textContent.trim() !== c.text) return null;
   return el;
 };
 
-// base64 z obsługą UTF-8
+// base64 with UTF-8 support
 const enc = s => btoa(unescape(encodeURIComponent(s)));
 const dec = b => decodeURIComponent(escape(atob(b)));
 
-// Selektor CSS elementu: od najbliższego id w górę, dalej :nth-of-type.
+// CSS selector of an element: from the nearest id upwards, then :nth-of-type.
 const cssPath = el => {
   const p = [];
   while (el && el.nodeType === 1) {

@@ -1,12 +1,12 @@
 node_modules/
 test-results/
 playwright-report/
-# eksporty z prawdziwego Oracle – nigdy do repo
+# exports/captures from the real Oracle app - never commit these
 *.har
 *.mhtml
 oracle-*.html
 export-*.json
-eksport-*
-zrzut-*
+export-dump-*
+capture-*
 screenshots/
 *.png.private

@@ -1,4 +1,4 @@
-// Prosty serwer statyczny dla makiety i testów (bez Pythona).
+// Tiny static server for the mock and the tests (no Python needed).
 const http = require('http'), fs = require('fs'), path = require('path');
 const root = path.join(__dirname, '..');
 const types = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.txt': 'text/plain; charset=utf-8', '.css': 'text/css' };

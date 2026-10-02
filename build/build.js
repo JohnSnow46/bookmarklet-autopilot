@@ -1,4 +1,4 @@
-// Źródła (src/*.js) → jednolinijkowe bookmarklety w dist/*.txt
+// Sources (src/*.js) → one-line bookmarklets in dist/*.txt
 const fs = require('fs'), path = require('path');
 const { minify } = require('terser');
 
@@ -7,11 +7,11 @@ const SCRIPTS = ['naucz', 'auto'];
 
 function check(name, code) {
   const bad = [];
-  if (code.includes('#')) bad.push('znak #');
-  if (code.includes('%')) bad.push('znak %');
-  if (/[\r\n]/.test(code)) bad.push('znak nowej linii');
-  if (!code.startsWith('javascript:')) bad.push('brak prefiksu javascript:');
-  if (bad.length) throw new Error('Bookmarklet "' + name + '" jest niepoprawny: ' + bad.join(', '));
+  if (code.includes('#')) bad.push('a hash character');
+  if (code.includes('%')) bad.push('a percent character');
+  if (/[\r\n]/.test(code)) bad.push('a newline');
+  if (!code.startsWith('javascript:')) bad.push('missing javascript: prefix');
+  if (bad.length) throw new Error('Bookmarklet "' + name + '" is invalid: ' + bad.join(', '));
 }
 
 async function buildOne(name) {
@@ -33,6 +33,6 @@ async function buildOne(name) {
   for (const n of SCRIPTS) {
     const code = await buildOne(n);
     fs.writeFileSync(path.join(root, 'dist', n + '.txt'), code);
-    console.log('dist/' + n + '.txt  ' + code.length + ' znaków');
+    console.log('dist/' + n + '.txt  ' + code.length + ' chars');
   }
-})().catch(e => { console.error('BŁĄD BUILDU: ' + e.message); process.exit(1); });
+})().catch(e => { console.error('BUILD ERROR: ' + e.message); process.exit(1); });

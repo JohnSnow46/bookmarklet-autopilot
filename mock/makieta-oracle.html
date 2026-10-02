@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="pl">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Makieta Oracle – test automatyzacji</title>
+<title>Oracle mock – automation test</title>
 <style>
   :root {
     --bar: #31465a; --bar-text: #e8eef3; --bg: #eef1f4; --panel: #ffffff;
@@ -36,51 +36,47 @@
   .busy { position: absolute; inset: 0; background: rgba(255,255,255,.75); display: none; align-items: center; justify-content: center; color: var(--muted); }
   .busy.on { display: flex; }
   .codes button { margin: 3px 4px 0 0; padding: 2px 8px; font-size: 13px; }
-  .bm a { display: inline-block; margin: 4px 6px 4px 0; padding: 4px 10px; border: 1px dashed var(--accent); color: var(--accent); text-decoration: none; background: #f4f8fc; }
   #log { font-size: 12px; max-height: 260px; overflow: auto; background: #f7f9fa; border: 1px solid var(--line); padding: 6px; margin: 0; white-space: pre-wrap; }
   .doc { border: 1px solid var(--line); padding: 20px; max-width: 520px; background: #fff; }
   @media print { header, aside, button, .busy { display: none !important; } .wrap { display: block; padding: 0; } .panel { border: 0; } }
 </style>
 </head>
 <body>
-<header>System magazynowy <small>makieta do testów, nie prawdziwy Oracle</small></header>
+<header>Warehouse system <small>test mock, not the real Oracle</small></header>
 <div class="wrap">
   <main class="panel">
     <div id="view"></div>
-    <div class="busy" id="busy">Przetwarzanie…</div>
+    <div class="busy" id="busy">Processing…</div>
   </main>
   <aside class="panel">
-    <h2>Panel testowy</h2>
+    <h2>Test panel</h2>
     <div id="sideMain">
       <div class="codes">
-        Kliknij kod, żeby wpisać go jak czytnik:<br>
+        Click a code to type it like a scanner:<br>
         <span id="codes"></span>
       </div>
-      <h3>Zakładki (przeciągnij na pasek zakładek)</h3>
-      <div class="bm">
-        <a id="bmTest">Test</a>
-        <a id="bmField">Pokaż pole</a>
-        <a id="bmAuto">Auto etap 1</a>
-      </div>
     </div>
-    <h3>Dziennik</h3>
+    <h3>Log</h3>
     <pre id="log"></pre>
   </aside>
 </div>
 
 <script>
-/* ---------- dane testowe ---------- */
+/* ---------- test data ---------- */
 const PRODUCTS = {
-  "5901234123457": { name: "Odkurzacz R10 – płyta główna", line: "PCB-R10-MAIN rev.B" },
-  "5909876543210": { name: "Moduł lidar LDS-3", line: "LDS-3 SN 22-04419" },
-  "5900000000017": { name: "Akumulator 14.4V 5200mAh", line: "BAT-144-52 partia 07/26" }
+  "5901234123457": { name: "Vacuum R10 – main board", line: "PCB-R10-MAIN rev.B" },
+  "5909876543210": { name: "Lidar module LDS-3", line: "LDS-3 SN 22-04419" },
+  "5900000000017": { name: "Battery 14.4V 5200mAh", line: "BAT-144-52 batch 07/26" }
 };
-const USERS = [["u1", "Nowak Anna"], ["u2", "Kowalski Jan"], ["u3", "Ty (test)"]];
+const USERS = [["u1", "Doe Jane"], ["u2", "Roe John"], ["u3", "You (test)"]];
 
-/* ---------- narzędzia ---------- */
+/* ---------- helpers ---------- */
 const $ = id => document.getElementById(id);
 const view = $("view");
 const params = new URLSearchParams(location.search);
+/* mock variants: ?variant=nolist,iframe,reload (comma separated) */
+const variants = (params.get("variant") || "").split(",");
+const has = v => variants.includes(v);
 function log(t) { const l = $("log"); l.textContent = new Date().toLocaleTimeString() + "  " + t + "\n" + l.textContent; }
 function rnd(a, b) { return a + Math.random() * (b - a); }
 function busy(ms) {
@@ -89,8 +85,8 @@ function busy(ms) {
 }
 function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
 
-/* Model jak we frameworku: wartości trafiają tu tylko przez zdarzenia input/change.
-   Jeśli skrypt ustawi samo .value bez zdarzeń, zapis się nie uda – tak jak w prawdziwym systemie. */
+/* Framework-like model: values only reach it through input/change events.
+   If a script sets plain .value without events, Save fails – like in a real framework. */
 let model = {};
 function bind(id, key) {
   const el = $(id);
@@ -100,14 +96,14 @@ function bind(id, key) {
   upd();
 }
 
-/* ---------- widoki ---------- */
+/* ---------- views ---------- */
 function renderSearch() {
   model = {};
   view.innerHTML = `
-    <h2>Wyszukiwanie produktu</h2>
-    <label for="pt1:r1:0:it1::content">Kod produktu</label>
+    <h2>Product search</h2>
+    <label for="pt1:r1:0:it1::content">Product code</label>
     <input id="pt1:r1:0:it1::content" autocomplete="off">
-    <button id="pt1:r1:0:cb1" type="button">Szukaj</button>
+    <button id="pt1:r1:0:cb1" type="button">Search</button>
     <div id="pt1:r1:0:res"></div>`;
   const inp = $("pt1:r1:0:it1::content");
   bind("pt1:r1:0:it1::content", "code");
@@ -120,16 +116,16 @@ async function doSearch() {
   const res = $("pt1:r1:0:res");
   res.innerHTML = "";
   const code = (model.code || "").trim();
-  log("Szukaj: " + (code || "(puste)"));
+  log("Search: " + (code || "(empty)"));
   await busy(rnd(600, 1400));
   const p = PRODUCTS[code];
-  if (!p) { res.innerHTML = `<div class="msg err">Nie znaleziono produktu o kodzie „${esc(code)}”.</div>`; return; }
+  if (!p) { res.innerHTML = `<div class="msg err">No product found for code "${esc(code)}".</div>`; return; }
   res.innerHTML = `
-    <table><tr><th>Kod</th><th>Nazwa</th></tr>
+    <table><tr><th>Code</th><th>Name</th></tr>
     <tr><td>${esc(code)}</td><td><a href="#" class="xResult" id="pt1:r1:0:t1:0:cl1">${esc(p.name)}</a></td></tr></table>`;
   $("pt1:r1:0:t1:0:cl1").addEventListener("click", async e => {
     e.preventDefault();
-    log("Wybrano: " + p.name);
+    log("Selected: " + p.name);
     await busy(rnd(700, 1600));
     renderForm(code, p);
   });
@@ -138,63 +134,63 @@ async function doSearch() {
 function renderForm(code, p) {
   model = {};
   view.innerHTML = `
-    <h2>Formularz: ${esc(p.name)}</h2>
-    <label for="pt1:r2:0:it1::content">Linia 1 (do skopiowania)</label>
+    <h2>Form: ${esc(p.name)}</h2>
+    <label for="pt1:r2:0:it1::content">Line 1 (to copy)</label>
     <input id="pt1:r2:0:it1::content" readonly value="${esc(p.line)}">
-    <label for="pt1:r2:0:it2::content">Linia 2 (wklej linię 1)</label>
+    <label for="pt1:r2:0:it2::content">Line 2 (paste line 1)</label>
     <input id="pt1:r2:0:it2::content">
-    <label for="pt1:r2:0:it3::content">Linia 3 (dopisz)</label>
+    <label for="pt1:r2:0:it3::content">Line 3 (append)</label>
     <textarea id="pt1:r2:0:it3::content"></textarea>
-    <label for="pt1:r2:0:soc1::content">Użytkownik</label>
+    ${has("nolist") ? "" : `<label for="pt1:r2:0:soc1::content">User</label>
     <select id="pt1:r2:0:soc1::content">
-      <option value="">– wybierz –</option>
+      <option value="">– select –</option>
       ${USERS.map(([v, t]) => `<option value="${v}">${esc(t)}</option>`).join("")}
-    </select>
+    </select>`}
     <br><button id="pt1:r2:0:cb_save" type="button">Save</button>
     <div id="pt1:r2:0:msg"></div>`;
   bind("pt1:r2:0:it1::content", "line1");
   bind("pt1:r2:0:it2::content", "line2");
   bind("pt1:r2:0:it3::content", "line3");
-  bind("pt1:r2:0:soc1::content", "user");
+  if (!has("nolist")) bind("pt1:r2:0:soc1::content", "user");
   $("pt1:r2:0:cb_save").addEventListener("click", () => doSave(code));
 }
 
 async function doSave(code) {
   const msg = $("pt1:r2:0:msg");
   const errors = [];
-  if (model.line2 !== model.line1) errors.push("Linia 2 musi być kopią linii 1.");
-  if (!(model.line3 || "").trim()) errors.push("Linia 3 jest pusta.");
-  if (!model.user) errors.push("Nie wybrano użytkownika.");
+  if (model.line2 !== model.line1) errors.push("Line 2 must be a copy of line 1.");
+  if (!(model.line3 || "").trim()) errors.push("Line 3 is empty.");
+  if (!has("nolist") && !model.user) errors.push("No user selected.");
   if (errors.length) {
     msg.innerHTML = `<div class="msg err">${errors.join("<br>")}</div>`;
-    log("Save odrzucony: " + errors.join(" "));
+    log("Save rejected: " + errors.join(" "));
     return;
   }
   await busy(rnd(900, 1800));
   const doc = Math.floor(100000 + Math.random() * 900000);
-  log(`Zapisano dokument ${doc} (kod ${code})`);
+  log(`Saved document ${doc} (code ${code}; line3: "${model.line3}"; user: ${model.user || "-"})`);
   renderSaved(code, doc);
 }
 
 function renderSaved(code, doc) {
   view.innerHTML = `
-    <h2>Dokument ${doc}</h2>
-    <div class="msg ok">Zapisano. Wygeneruj wydruk.</div>
-    <button id="pt1:r3:0:cb_gen" type="button">Generuj</button>
-    <button id="pt1:r3:0:cb_new" type="button">Nowy skan</button>`;
+    <h2>Document ${doc}</h2>
+    <div class="msg ok">Saved. Generate the printout.</div>
+    <button id="pt1:r3:0:cb_gen" type="button">Generate</button>
+    <button id="pt1:r3:0:cb_new" type="button">New scan</button>`;
   const gen = $("pt1:r3:0:cb_gen");
   let ready = false;
   gen.addEventListener("click", () => {
     if (ready) {
-      log("Print: otwieram nową kartę");
+      log("Print: opening new tab");
       const w = window.open(location.pathname + "?print=" + doc + "&kod=" + encodeURIComponent(code), "_blank");
-      if (!w) log("UWAGA: przeglądarka zablokowała nową kartę");
+      if (!w) log("WARNING: the browser blocked the new tab");
       return;
     }
     gen.disabled = true;
-    gen.textContent = "Generowanie…";
-    log("Generowanie wydruku…");
-    setTimeout(() => { gen.disabled = false; gen.textContent = "Print"; ready = true; log("Gotowe: przycisk zmienił się na Print"); }, rnd(1500, 3000));
+    gen.textContent = "Generating…";
+    log("Generating printout…");
+    setTimeout(() => { gen.disabled = false; gen.textContent = "Print"; ready = true; log("Ready: the button changed to Print"); }, rnd(1500, 3000));
   });
   $("pt1:r3:0:cb_new").addEventListener("click", renderSearch);
 }
@@ -203,138 +199,38 @@ async function renderPrint() {
   $("sideMain").style.display = "none";
   const doc = params.get("print"), code = params.get("kod") || "";
   const p = PRODUCTS[code] || { name: "?", line: "?" };
-  view.innerHTML = `<h2>Podgląd wydruku – dokument ${esc(doc)}</h2><p>Przygotowywanie raportu…</p>`;
-  log("Karta wydruku otwarta");
+  view.innerHTML = `<h2>Print preview – document ${esc(doc)}</h2><p>Preparing report…</p>`;
+  log("Print tab opened");
   await busy(rnd(1200, 2500));
   view.innerHTML = `
-    <h2>Podgląd wydruku – dokument ${esc(doc)}</h2>
+    <h2>Print preview – document ${esc(doc)}</h2>
     <div class="doc">
-      <strong>Dokument ${esc(doc)}</strong><br>
-      Produkt: ${esc(p.name)}<br>
-      Kod: ${esc(code)}<br>
+      <strong>Document ${esc(doc)}</strong><br>
+      Product: ${esc(p.name)}<br>
+      Code: ${esc(code)}<br>
       ${esc(p.line)}<br>
-      Data: ${new Date().toLocaleString()}
+      Date: ${new Date().toLocaleString()}
     </div>
     <button id="pt1:p1:cb_apply" type="button">Apply</button>`;
-  $("pt1:p1:cb_apply").addEventListener("click", () => { log("Apply → drukowanie"); window.print(); });
+  $("pt1:p1:cb_apply").addEventListener("click", () => { log("Apply → printing"); window.print(); });
 }
 
-/* ---------- panel testowy ---------- */
+/* ---------- test panel ---------- */
 function fillCodeLikeScanner(code) {
   const inp = $("pt1:r1:0:it1::content");
   if (!inp) { renderSearch(); return fillCodeLikeScanner(code); }
   inp.value = code;
   inp.dispatchEvent(new Event("input", { bubbles: true }));
   inp.focus();
-  log("Wpisano kod: " + code);
+  log("Typed code: " + code);
 }
 $("codes").innerHTML = Object.keys(PRODUCTS).map(c => `<button type="button" data-c="${c}">${c}</button>`).join("")
-  + `<button type="button" data-c="1111111111111">nieznany</button>`;
+  + `<button type="button" data-c="1111111111111">unknown</button>`;
 $("codes").addEventListener("click", e => { const c = e.target.dataset.c; if (c) fillCodeLikeScanner(c); });
-
-/* ---------- zakładki (bookmarklety) ---------- */
-function bmTest() { alert("ok"); }
-
-function bmField() {
-  const e = document.activeElement;
-  navigator.clipboard.writeText(e.outerHTML)
-    .then(() => alert("Skopiowano: " + e.tagName + " " + e.id))
-    .catch(() => prompt("Skopiuj ręcznie:", e.outerHTML));
-}
-
-function bmAuto() {
-  /* ===== USTAWIENIA ===== */
-  const CONFIG = {
-    extraLine: "Dopisana linia (test)",
-    user: "Ty (test)",
-    confirmSave: true   /* na czas testów pyta przed Save */
-  };
-  /* ===== SELEKTORY (na Oracle podmienisz te wartości) ===== */
-  const SEL = {
-    search: "pt1:r1:0:it1::content",
-    searchBtn: "pt1:r1:0:cb1",
-    result: "a.xResult",
-    line1: "pt1:r2:0:it1::content",
-    line2: "pt1:r2:0:it2::content",
-    line3: "pt1:r2:0:it3::content",
-    user: "pt1:r2:0:soc1::content",
-    save: "pt1:r2:0:cb_save",
-    apply: "pt1:p1:cb_apply"
-  };
-
-  const sleep = ms => new Promise(r => setTimeout(r, ms));
-  async function waitFor(fn, what, timeout = 20000) {
-    const t0 = Date.now();
-    while (Date.now() - t0 < timeout) {
-      let r = null;
-      try { r = fn(); } catch (_) {}
-      if (r) return r;
-      await sleep(150);
-    }
-    throw new Error("Nie pojawił się element: " + what);
-  }
-  const byId = id => document.getElementById(id);
-  const btnByText = (txt, d = document) =>
-    [...d.querySelectorAll("button, a")].find(b => b.textContent.trim() === txt && !b.disabled && b.offsetParent !== null);
-  function setVal(el, v) {
-    const proto = el instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype
-      : el instanceof HTMLSelectElement ? HTMLSelectElement.prototype : HTMLInputElement.prototype;
-    Object.getOwnPropertyDescriptor(proto, "value").set.call(el, v);
-    el.dispatchEvent(new Event("input", { bubbles: true }));
-    el.dispatchEvent(new Event("change", { bubbles: true }));
-  }
-
-  (async () => {
-    try {
-      const search = byId(SEL.search);
-      if (!search || !search.value.trim()) throw new Error("Najpierw zeskanuj kod do pola wyszukiwania.");
-      byId(SEL.searchBtn).click();
-      (await waitFor(() => document.querySelector(SEL.result), "wynik wyszukiwania")).click();
-
-      const line1 = await waitFor(() => byId(SEL.line1), "formularz");
-      setVal(byId(SEL.line2), line1.value);
-      setVal(byId(SEL.line3), CONFIG.extraLine);
-      const sel = byId(SEL.user);
-      const opt = [...sel.options].find(o => o.text.trim() === CONFIG.user);
-      if (!opt) throw new Error("Brak użytkownika na liście: " + CONFIG.user);
-      setVal(sel, opt.value);
-
-      if (CONFIG.confirmSave && !confirm("Zapisać?")) return;
-      byId(SEL.save).click();
-
-      (await waitFor(() => btnByText("Generuj"), "przycisk Generuj")).click();
-      const printBtn = await waitFor(() => btnByText("Print"), "przycisk Print", 30000);
-
-      /* przejęcie nowej karty: łapiemy okno otwierane przez stronę */
-      const origOpen = window.open;
-      window.open = function (...args) {
-        window.open = origOpen;
-        const w = origOpen.apply(window, args);
-        if (!w) { alert("Przeglądarka zablokowała nową kartę. Zezwól na wyskakujące okna dla tej strony."); return w; }
-        waitFor(() => w.document.getElementById(SEL.apply), "Apply w nowej karcie", 30000)
-          .then(b => b.click())
-          .catch(e => alert("Karta wydruku: " + e.message));
-        return w;
-      };
-      printBtn.click();
-    } catch (e) {
-      alert("Automat: " + e.message);
-    }
-  })();
-}
-
-function toBookmarklet(fn) { return "javascript:" + encodeURIComponent("(" + fn.toString() + ")()"); }
-$("bmTest").href = toBookmarklet(bmTest);
-$("bmField").href = toBookmarklet(bmField);
-$("bmAuto").href = toBookmarklet(bmAuto);
-document.querySelectorAll(".bm a").forEach(a => a.addEventListener("click", e => {
-  e.preventDefault();
-  alert("Przeciągnij ten link na pasek zakładek (Ctrl+Shift+B pokazuje pasek), a potem klikaj go z paska.");
-}));
 
 /* ---------- start ---------- */
 if (params.has("print")) renderPrint(); else renderSearch();
-if (location.protocol === "file:") log("UWAGA: otwarto jako plik. Przejęcie nowej karty zadziała tylko przez http://localhost.");
+if (location.protocol === "file:") log("WARNING: opened as a file. New-tab handling only works over http://localhost.");
 </script>
 </body>
 </html>
