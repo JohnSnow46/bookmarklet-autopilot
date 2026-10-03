@@ -16,11 +16,11 @@ const A = rec.actions;
 const save = () => localStorage.setItem(RK, JSON.stringify(rec));
 
 const b = makeBar('__record');
-let off = null;
+let off = null, notice = '';
 
 const textLike = el => {
   const t = el.tagName.toLowerCase();
-  return t === 'textarea' || (t === 'input' && !/^(button|submit|reset|image|checkbox|radio|file)$/.test(el.type));
+  return t === 'textarea' || (t === 'input' && !/^(button|submit|reset|image|checkbox|radio|file|password|hidden)$/.test(el.type));
 };
 const buttonLike = el => {
   const t = el.tagName.toLowerCase();
@@ -62,6 +62,7 @@ const onClick = e => {
 const onChange = e => {
   const el = e.target;
   if (!el || !el.tagName || b.contains(el)) return;
+  if (el.type === 'password') { notice = 'A password field was not recorded: type it yourself when Play stops there.'; draw(); return; }
   const tag = el.tagName.toLowerCase();
   if (tag === 'select') {
     const o = el.options[el.selectedIndex];
@@ -101,12 +102,15 @@ const review = () => {
     if (ans === null) return;
     // an empty answer accepts the suggestion
     a.mode = { 1: 'fixed', 2: 'only', 3: 'profile.name', 4: 'profile.org' }[ans.trim() || guess] || 'fixed';
+    if (a.t === 'select' && a.mode === 'only') a.mode = 'fixed';
     if (a.mode.startsWith('profile')) {
       usesProfile = true;
       const prev = steps[i - 1]; // the text typed into the search box of that list follows the profile, too
       if (prev && prev.t === 'set' && prev.win === a.win && !prev.src) { prev.src = a.mode; delete prev.value; }
     }
   });
+  // data that changes between runs is not kept (product names, people): only a fixed choice stays in the recording
+  steps.forEach(a => { if ((a.t === 'row' || a.t === 'select') && a.mode !== 'fixed') a.text = ''; });
   const profiles = [];
   if (usesProfile) {
     const o = ((prevCfg && prevCfg.opts) || {}).profiles || [];
@@ -134,7 +138,7 @@ const review = () => {
     rules: (prevCfg && prevCfg.v === 4 && prevCfg.rules) || [],
   }));
   rec.done = true;
-  rec.actions = steps;
+  rec.actions = []; // the raw recording (typed values, row texts) does not stay behind
   save();
   if (off) off();
   b.style.background = 'rgb(46,125,50)';
@@ -145,6 +149,7 @@ const review = () => {
 const draw = () => {
   b.innerHTML = '<b>' + String.fromCharCode(9679) + ' Recording' + (win ? ' (new tab)' : '') + ':</b> ' + A.length + ' step(s). Do the process normally; use Stop when you are done.';
   b.style.background = 'rgb(179,38,30)';
+  if (notice) b.appendChild(document.createTextNode(' ' + notice));
   barButton(b, 'Stop and review', review);
   barButton(b, 'Undo last', () => { A.pop(); save(); draw(); });
   barButton(b, 'Cancel recording', () => { localStorage.removeItem(RK); quit(); });

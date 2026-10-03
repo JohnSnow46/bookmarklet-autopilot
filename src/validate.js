@@ -33,7 +33,8 @@ const waitPick = (msg, cb) => {
 const home = note => {
   stop();
   b.style.background = 'rgb(31,111,178)';
-  b.innerHTML = '<b>Validate:</b> ' + cfg.rules.length + ' rule(s). ' + (note || '');
+  b.innerHTML = '<b>Validate:</b> ' + cfg.rules.length + ' rule(s). ';
+  b.appendChild(document.createTextNode(note || '')); // the note holds field labels from the page: text only
   barButton(b, 'Add rule', chooseType);
   barButton(b, 'Rules', listRules);
   barButton(b, 'Check now', checkNow);

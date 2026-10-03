@@ -12,8 +12,9 @@ types for you) and also the whole risk: the code you paste into a bookmark is tr
 - It never talks to the network. The build **fails** if a bookmarklet contains `fetch`, `XMLHttpRequest`, `sendBeacon`,
   `WebSocket`, `EventSource`, `eval`, `new Function`, `importScripts`, `import(` or `document.cookie`.
 - It has no runtime dependencies. `terser` and Playwright are build/test tools only and are not part of the output.
+- Record never records password or hidden fields; typed values of other fields stay in the recording (they are what Play types), which is why Export lists them first.
 - It reads and writes only `localStorage` keys on the page's own origin: `autoLearn` (learning state), `autoCfg`
-  (configuration and rules) and `autoProfiles` and `autoProfileIdx` (the name/organization a person typed or chose on this computer).
+  (configuration and rules) and `autoRec` (the recording in progress, emptied when saved), `playState` (sessionStorage, step counter of a running Play), `autoProfiles` and `autoProfileIdx` (the name/organization a person typed or chose on this computer).
 - The only other effects are clicks, typing into fields, the "Save?" question, alerts/prompts, and (Export) one clipboard write.
 
 ## Data handling
@@ -48,6 +49,10 @@ can read the configuration. Share it only through internal channels.
 | 10 | Export embeds the configuration as base64 in a code string that gets pasted and sent around. | Low | Documented above; Export asks whether to leave out the personal list option. |
 | 11 | The error heuristic (`role=alert`, `.error`, ...) can match an unrelated visible element. | Low | Auto only reacts to texts that were **not** visible before Save, and the learned error element has priority. A false positive stops Auto (safe direction). |
 | 12 | The "looks auto-generated" id check is a heuristic. | Info | Only a warning; the fallback selector reduces the impact. |
+| 14 | Validate put page-derived text (field labels) into the bar through `innerHTML`: a page controlling a label could inject markup into the bar. | Low (the page can already run script; matters under Trusted Types/strict CSP) | **Fixed**: text nodes only; regression test with a hostile label. |
+| 15 | Record stored typed values of every text field, including password fields. | Medium (credentials in localStorage) | **Fixed**: password and hidden fields are never recorded; the bar says so. Test checks that the secret is nowhere in localStorage. |
+| 16 | Record stored the text of picked list rows (product names, people) and the raw recording stayed in localStorage. | Medium (company data in storage and exports) | **Fixed**: row/list texts are kept only for a fixed choice; for *the only row / your name / your organization* they are dropped, and the raw recording (`autoRec`) is emptied after saving. |
+| 17 | Export put fixed texts of the recording in the exported code without showing them. | Low-Medium | **Fixed**: Export lists every fixed text and the append text and asks before copying; Cancel copies nothing. |
 | 13 | Selecting a person in a searchable list could pick the wrong person (same name, two organizations). | Medium (data quality) | Mitigated: exactly one matching row is required, otherwise Auto stops, lists the rows and selects nothing. |
 
 ## Owner's tasks for the installer

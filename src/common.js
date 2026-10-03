@@ -300,8 +300,8 @@ const modeText = m => ({ only: ' (the only row)', 'profile.name': ' (your name)'
 const say = a => {
   const l = a.loc ? a.loc.label : '', w = a.win ? ' [new tab]' : '';
   if (a.t === 'click') return 'click ' + (a.text ? '"' + a.text + '"' : '[' + l + ']') + w;
-  if (a.t === 'row') return 'choose the list row "' + short(a.text) + '"' + modeText(a.mode) + w;
-  if (a.t === 'select') return 'choose "' + a.text + '" in "' + l + '"' + modeText(a.mode) + w;
+  if (a.t === 'row') return 'choose the list row' + (a.text ? ' "' + short(a.text) + '"' : '') + modeText(a.mode) + w;
+  if (a.t === 'select') return 'choose' + (a.text ? ' "' + a.text + '"' : '') + ' in "' + l + '"' + modeText(a.mode) + w;
   const what = a.src === 'scan' ? 'the scanned code' : a.src === 'copy' ? 'a copy of "' + a.from.label + '"'
     : a.src === 'profile.name' ? 'your name' : a.src === 'profile.org' ? 'your organization' : '"' + short(a.value || '') + '"';
   return 'type ' + what + ' into "' + l + '"' + w;
