@@ -14,7 +14,7 @@ types for you) and also the whole risk: the code you paste into a bookmark is tr
 - It has no runtime dependencies. `terser` and Playwright are build/test tools only and are not part of the output.
 - Record never records password or hidden fields; typed values of other fields stay in the recording (they are what Play types), which is why Export lists them first.
 - It reads and writes only `localStorage` keys on the page's own origin: `autoLearn` (learning state), `autoCfg`
-  (configuration and rules) and `autoRec` (the recording in progress, emptied when saved), `playState` (sessionStorage, step counter of a running Play), `autoProfiles` and `autoProfileIdx` (the name/organization a person typed or chose on this computer).
+  (configuration and rules) and `autoRec` (the recording in progress, emptied when saved), `autoLog` (run log: time, duration, result, step - no codes, products or people; last 500 runs; *Show* can clear it), `playState` (sessionStorage, step counter of a running Play), `autoProfiles` and `autoProfileIdx` (the name/organization a person typed or chose on this computer).
 - The only other effects are clicks, typing into fields, the "Save?" question, alerts/prompts, and (Export) one clipboard write.
 
 ## Data handling
@@ -53,6 +53,7 @@ can read the configuration. Share it only through internal channels.
 | 15 | Record stored typed values of every text field, including password fields. | Medium (credentials in localStorage) | **Fixed**: password and hidden fields are never recorded; the bar says so. Test checks that the secret is nowhere in localStorage. |
 | 16 | Record stored the text of picked list rows (product names, people) and the raw recording stayed in localStorage. | Medium (company data in storage and exports) | **Fixed**: row/list texts are kept only for a fixed choice; for *the only row / your name / your organization* they are dropped, and the raw recording (`autoRec`) is emptied after saving. |
 | 17 | Export put fixed texts of the recording in the exported code without showing them. | Low-Medium | **Fixed**: Export lists every fixed text and the append text and asks before copying; Cancel copies nothing. |
+| 18 | Dry run must never change data. | - | By design: it only locates and outlines elements; a test checks that no field is typed into and nothing is clicked. |
 | 13 | Selecting a person in a searchable list could pick the wrong person (same name, two organizations). | Medium (data quality) | Mitigated: exactly one matching row is required, otherwise Auto stops, lists the rows and selects nothing. |
 
 ## Owner's tasks for the installer

@@ -34,6 +34,19 @@ new tab, and stops with the step and the reason if something differs (a field th
 is missing or ambiguous, an error shown by the application after Save). **Export** turns a recording into a Play bookmarklet
 with the recording built in, to give to a colleague (their own name and organization are asked on first use).
 
+Three helpers built from the same Play code:
+
+- **Dry run** - the safe first test on a real system. It checks which recorded steps it can find *on the screen as it is
+  now*, highlights them, and reports `OK` / `not on this screen` / `found, but hidden, disabled or with another caption` per
+  step, plus the current state of the rules. It clicks and types nothing. Run it on each screen of the process.
+- **Series** - many products in a row. Click it once; it waits for a scanned code, runs, waits for the next scan, runs
+  again, until you press *Stop* on its bar. A code counts once the scanner has finished typing it; after a run the field has
+  to be empty again (or gone) first, so two identical items scanned one after another are two products. Full page reloads
+  end a series (the script dies with the page): use Play there.
+- **Run log** - Play and Series append each run to a log on this computer: time, duration, result (completed / stopped /
+  cancelled at "Save?") and the step where it stopped, **without codes, products or people**. *Show* summarises it (runs
+  today, average time of a completed run, where runs stop most often), which is the number to show a manager.
+
 Learn and Auto below remain as the advanced, fully controlled variant.
 
 ## The bookmarklets
@@ -41,6 +54,7 @@ Learn and Auto below remain as the advanced, fully controlled variant.
 | Name | What it does |
 | --- | --- |
 | **Record** / **Play** | See above. Record needs no teaching steps; Play repeats what was recorded. Recordings are stored in the same `localStorage` as everything else and never leave the browser. |
+| **Series** / **Dry run** | Play for many products in a row / a check that clicks nothing. See above. |
 | **Learn** | Walks you through the process step by step. Ctrl+click remembers an element, a plain click works normally, so you can do the real process while teaching it. Warns ("Are you sure?") about a wrong element type, a duplicate pick, an ambiguous selector or an auto-generated-looking id, and shows a summary before saving. Has Back, Skip (optional steps) and Quit. At the end it asks what text to append and which list option to pick, so nothing is hard-coded. |
 | **Auto** | Runs the process from the saved configuration: waits for elements, fills fields with real framework events, checks your validation rules, optionally asks "Save?", clicks Generate → Print, takes over the new tab and clicks Apply. Stops with the step and the reason when something is wrong, including an error message shown by the application after Save. |
 | **Validate** | Same Ctrl+click idea for validation rules: *A equals B*, *A differs from B*, *A is not empty*, *A equals / contains a text*, *A matches a regex*. Each rule says when it runs: before Save, before Generate, or manual only. Works with any field, not only this process. |
@@ -164,6 +178,8 @@ The build wraps `common.js` + a script in an IIFE, minifies it with terser and *
 - [x] 5. Mock variants (iframe, reload, no list) and script support for them
 - [x] 6. Show and Export (Auto with embedded configuration)
 - [x] 7. Installer page for GitHub Pages
+- [x] Record and Play (no step-by-step teaching), Export of recordings
+- [x] Dry run, Series, run log
 - [ ] Verified on the real Oracle application (only possible at work: ids, iframes, policy)
 
 ## Security
