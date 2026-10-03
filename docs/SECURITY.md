@@ -1,0 +1,78 @@
+# Security notes and audit
+
+Scope: the bookmarklets in `src/`, the build in `build/`, the repository and the GitHub Pages installer.
+Audit date: 2026-10-02, state after the last roadmap stage. Self-review by the author; not an independent penetration test.
+
+## What the bookmarklets can and cannot do
+
+A bookmarklet runs with **the full rights of the page it is clicked on**. That is the whole point (it clicks and
+types for you) and also the whole risk: the code you paste into a bookmark is trusted completely. Therefore:
+
+- The code is short (1-7 KB per bookmarklet) and readable in `src/`; reviewing it before use is realistic.
+- It never talks to the network. The build **fails** if a bookmarklet contains `fetch`, `XMLHttpRequest`, `sendBeacon`,
+  `WebSocket`, `EventSource`, `eval`, `new Function`, `importScripts`, `import(` or `document.cookie`.
+- It has no runtime dependencies. `terser` and Playwright are build/test tools only and are not part of the output.
+- Record never records password or hidden fields; typed values of other fields stay in the recording (they are what Play types), which is why Export lists them first.
+- It reads and writes only `localStorage` keys on the page's own origin: `autoLearn` (learning state), `autoCfg`
+  (configuration and rules) and `autoRec` (the recording in progress, emptied when saved), `autoLog` (run log: time, duration, result, step - no codes, products or people; last 500 runs; *Show* can clear it), `playState` (sessionStorage, step counter of a running Play), `autoProfiles` and `autoProfileIdx` (the name/organization a person typed or chose on this computer).
+- The only other effects are clicks, typing into fields, the "Save?" question, alerts/prompts, and (Export) one clipboard write.
+
+## Data handling
+
+| Item | Where it lives | Notes |
+| --- | --- | --- |
+| Selectors, frame paths, fallback selectors | browser `localStorage`, per origin | Page structure, not content. Never committed. |
+| Button captions (`Search`, `Save`, `Generate`, `Print`, `Apply`) | same | Needed to tell the Generate/Print states apart. |
+| Field labels of rule fields (e.g. a `<label>` text) | same, in `autoCfg.rules` | UI captions, not record data. |
+| Appended text, profiles (name, organization), "ask before Save" flag | same | Typed by the user. A name is personal data: it stays in the browser, is included in an export only if you agree, and never goes to the repository. |
+| Values of fields | **shown** in the failure message of a rule (an alert on your screen) | Never stored or sent. |
+| Page content, product names, scanned codes | **not stored** | Learn only keeps captions for the steps that need them. |
+
+The configuration is not a secret, but it describes the structure of the application it was made on, so keep it out of the repo
+(`.gitignore` covers common export/capture file names) and out of public places. **Export puts the configuration
+into the clipboard and into the exported code as base64. Base64 is encoding, not encryption**: anyone holding the code
+can read the configuration. Share it only with people who should see it.
+
+## Findings
+
+| # | Finding | Severity | Status |
+| --- | --- | --- | --- |
+| 1 | Learn stored the visible text of every clicked element, including a product name from the results list. | Low (local only, but unnecessary data) | **Fixed** (text is stored only for caption-matched steps). |
+| 2 | Nothing prevented a future change from adding network calls or dynamic code to a bookmarklet. | Medium (supply chain) | **Fixed**: build-time guard for forbidden APIs, also covered by a test on `dist/`. |
+| 3 | `window.open` is wrapped by Auto and restored on the first call. If the Print click never opens a tab, the wrapper stays until the page is reloaded. | Low | Accepted. Reload clears it; behaviour is limited to taking over one tab. |
+| 4 | The Learn/Validate bars are built with `innerHTML`. | Info | Reviewed: only constant strings are interpolated, no page data. Keep it that way. |
+| 5 | Frames and the print tab are accessed through `contentDocument` / `w.document`. | Info | Same-origin only; a cross-origin frame or tab is simply not reachable and Auto reports what it could not find. No bypass is attempted. |
+| 6 | Auto acts without a human looking at each step; a wrong learned element could save wrong data. | Medium (data quality) | Mitigated: "Save?" confirmation (default on), validation while learning, validation rules before Save/Generate, error detection after Save. Server-side validation in the application stays the authority. |
+| 7 | The installer page hands out code that people paste into their browser. A compromised repository or account would mean malicious code. | Medium | Mitigated: SHA-256 and a readable copy of each bookmarklet are shown on the page; see the owner's tasks below. |
+| 8 | `npm audit` | - | 0 known vulnerabilities (dev dependencies only). |
+| 9 | Git history: author identity is the GitHub no-reply address; no secrets, tokens or application data found. | - | Clean. |
+| 10 | Export embeds the configuration as base64 in a code string that gets pasted and sent around. | Low | Documented above; Export asks whether to leave out the personal list option. |
+| 11 | The error heuristic (`role=alert`, `.error`, ...) can match an unrelated visible element. | Low | Auto only reacts to texts that were **not** visible before Save, and the learned error element has priority. A false positive stops Auto (safe direction). |
+| 12 | The "looks auto-generated" id check is a heuristic. | Info | Only a warning; the fallback selector reduces the impact. |
+| 14 | Validate put page-derived text (field labels) into the bar through `innerHTML`: a page controlling a label could inject markup into the bar. | Low (the page can already run script; matters under Trusted Types/strict CSP) | **Fixed**: text nodes only; regression test with a hostile label. |
+| 15 | Record stored typed values of every text field, including password fields. | Medium (credentials in localStorage) | **Fixed**: password and hidden fields are never recorded; the bar says so. Test checks that the secret is nowhere in localStorage. |
+| 16 | Record stored the text of picked list rows (product names, people) and the raw recording stayed in localStorage. | Medium (application data in storage and exports) | **Fixed**: row/list texts are kept only for a fixed choice; for *the only row / your name / your organization* they are dropped, and the raw recording (`autoRec`) is emptied after saving. |
+| 17 | Export put fixed texts of the recording in the exported code without showing them. | Low-Medium | **Fixed**: Export lists every fixed text and the append text and asks before copying; Cancel copies nothing. |
+| 18 | Dry run must never change data. | - | By design: it only locates and outlines elements; a test checks that no field is typed into and nothing is clicked. |
+| 13 | Selecting a person in a searchable list could pick the wrong person (same name, two organizations). | Medium (data quality) | Mitigated: exactly one matching row is required, otherwise Auto stops, lists the rows and selects nothing. |
+
+## Owner's tasks for the installer
+
+- Tag releases and point users to the tag URL, not a moving branch.
+- Enable two-factor authentication on the GitHub account and branch protection on `main`.
+- Users should copy the code once and keep working from their own bookmark; they should not re-copy blindly after updates without reading the changelog.
+- Re-run `npm run build` and `npm test` before every push: the installer and `dist/` are generated and tested together.
+
+## Responsible use
+
+- A bookmarklet works only if the browser allows `javascript:` URLs. Some managed browsers disable them; then the project does not work there and no workaround is attempted.
+- Automate only applications you are allowed to automate, and respect their terms of use. Be able to show what the code does.
+- Automated actions are made under your account. You remain responsible for what is saved.
+- Never put real application data into this repository, including issues, screenshots and pull requests.
+
+## Pre-use checklist
+
+- [ ] Read `src/*.js` (or the built `dist/*.txt`) and confirm it only touches the page and `localStorage`.
+- [ ] Compare the SHA-256 shown by the installer with `dist/*.txt` of the tagged release.
+- [ ] Start with Dry run, then a harmless record; keep the "Save?" confirmation on until you trust the setup.
+- [ ] Never commit or post a configuration export from a real application.
