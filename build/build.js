@@ -4,7 +4,7 @@ const crypto = require('crypto');
 const { minify } = require('terser');
 
 const root = path.join(__dirname, '..');
-const SCRIPTS = ['learn', 'auto', 'validate', 'check', 'show', 'export']; // auto must come before export
+const SCRIPTS = ['record', 'play', 'learn', 'auto', 'validate', 'check', 'show', 'export']; // auto and play must come before export
 
 // Security guard: bookmarklets must never talk to the network or run dynamic code.
 const FORBIDDEN = /\b(fetch|XMLHttpRequest|sendBeacon|WebSocket|EventSource|eval|importScripts)\b|new Function|document\.cookie|import\(/;
@@ -23,8 +23,9 @@ function check(name, code) {
 async function buildOne(name, built) {
   const common = fs.readFileSync(path.join(root, 'src', 'common.js'), 'utf8');
   let body = fs.readFileSync(path.join(root, 'src', name + '.js'), 'utf8');
-  // Export embeds the finished Auto bookmarklet (without the javascript: prefix) as a string.
-  if (body.includes('__AUTO__')) body = body.replace('__AUTO__', () => JSON.stringify(built.auto.slice('javascript:'.length)));
+  // Export embeds the finished Auto and Play bookmarklets (without the javascript: prefix) as strings.
+  const embed = n => JSON.stringify(built[n].slice('javascript:'.length));
+  body = body.replace('__AUTO__', () => (built.auto ? embed('auto') : 'null')).replace('__PLAY__', () => (built.play ? embed('play') : 'null'));
   const wrapped = '(()=>{\n' + common + '\n' + body + '\n})();';
   const out = await minify(wrapped, {
     compress: { passes: 2 },
@@ -38,12 +39,14 @@ async function buildOne(name, built) {
 
 // What the installer page says about each bookmarklet.
 const INFO = {
-  learn: ['Learn', 'Teach the process once: Ctrl+click each element it asks for.'],
-  auto: ['Auto', 'Run the whole process after you have scanned a code.'],
+  record: ['Record', 'The easy way: do the process once, normally. Every click, typed value and choice is recorded.'],
+  play: ['Play', 'Repeats the recording. Scan a code first, then click Play.'],
+  learn: ['Learn', 'Advanced: teach the process step by step with Ctrl+click.'],
+  auto: ['Auto', 'Advanced: runs what Learn taught.'],
   validate: ['Validate', 'Add checks, for example "this field equals that field" or "not empty".'],
   check: ['Check', 'Run the "manual only" checks on the current page.'],
   show: ['Show', 'Show what has been learned.'],
-  export: ['Export', 'Create an Auto bookmarklet with your configuration built in, to give to a colleague.'],
+  export: ['Export', 'Create a Play (or Auto) bookmarklet with your recording built in, to give to a colleague.'],
 };
 const esc = t => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 

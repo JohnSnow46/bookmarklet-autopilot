@@ -4,7 +4,7 @@ const path = require('path');
 const crypto = require('crypto');
 const { useSource, MOCK, newSession, learnAll, autoRun } = require('./helpers');
 
-const NAMES = ['learn', 'auto', 'validate', 'check', 'show', 'export'];
+const NAMES = ['record', 'play', 'learn', 'auto', 'validate', 'check', 'show', 'export'];
 const dist = n => fs.readFileSync(path.join(__dirname, '..', 'dist', n + '.txt'), 'utf8');
 const INSTALLER = '/docs/index.html';
 

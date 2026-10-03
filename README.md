@@ -19,10 +19,28 @@ Because the real page markup must never leave the company, the scripts **do not 
 Instead, you *teach* them once on the live page: Ctrl+click an element and its location is remembered
 in the browser's own `localStorage`. Nothing is sent anywhere.
 
+## The easy way: Record and Play
+
+No step-by-step teaching. Click **Record**, do the process **once, normally** (scan, search, pick, fill, save, print,
+Apply in the new tab) and press *Stop and review*. Record notes every click, typed value and choice, and then asks a few
+short questions:
+
+- which steps to remove (a slip, a wrong click);
+- for each list choice: *always this one*, *the only row shown* (changes with every scan), *your name* or *your organization*;
+- before which steps to ask "Save?" (Save buttons are suggested; an empty answer accepts the suggestion).
+
+Then scan a code and click **Play**. It repeats the recording, copies fields that were copied while recording, takes over the
+new tab, and stops with the step and the reason if something differs (a field that does not keep its value, a row that
+is missing or ambiguous, an error shown by the application after Save). **Export** turns a recording into a Play bookmarklet
+with the recording built in, to give to a colleague (their own name and organization are asked on first use).
+
+Learn and Auto below remain as the advanced, fully controlled variant.
+
 ## The bookmarklets
 
 | Name | What it does |
 | --- | --- |
+| **Record** / **Play** | See above. Record needs no teaching steps; Play repeats what was recorded. Recordings are stored in the same `localStorage` as everything else and never leave the browser. |
 | **Learn** | Walks you through the process step by step. Ctrl+click remembers an element, a plain click works normally, so you can do the real process while teaching it. Warns ("Are you sure?") about a wrong element type, a duplicate pick, an ambiguous selector or an auto-generated-looking id, and shows a summary before saving. Has Back, Skip (optional steps) and Quit. At the end it asks what text to append and which list option to pick, so nothing is hard-coded. |
 | **Auto** | Runs the process from the saved configuration: waits for elements, fills fields with real framework events, checks your validation rules, optionally asks "Save?", clicks Generate → Print, takes over the new tab and clicks Apply. Stops with the step and the reason when something is wrong, including an error message shown by the application after Save. |
 | **Validate** | Same Ctrl+click idea for validation rules: *A equals B*, *A differs from B*, *A is not empty*, *A equals / contains a text*, *A matches a regex*. Each rule says when it runs: before Save, before Generate, or manual only. Works with any field, not only this process. |

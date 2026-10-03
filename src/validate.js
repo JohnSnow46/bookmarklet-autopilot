@@ -1,7 +1,7 @@
 // Validate: build validation rules with Ctrl+click, stored in the configuration (autoCfg.rules).
 const CK = 'autoCfg';
 const cfg = JSON.parse(localStorage.getItem(CK) || 'null') || { v: 3, steps: {}, opts: {}, rules: [] };
-if (cfg.v !== 3) { alert('The configuration is in an old format. Run Learn again.'); return; }
+if (cfg.v !== 3 && cfg.v !== 4) { alert('The configuration is in an old format. Run Learn again.'); return; }
 cfg.rules = cfg.rules || [];
 const save = () => localStorage.setItem(CK, JSON.stringify(cfg));
 

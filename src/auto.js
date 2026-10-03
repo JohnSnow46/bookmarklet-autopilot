@@ -17,24 +17,6 @@ const failRules = when => {
   if (f.length) throw new Error('Validation failed, nothing was saved.\n' + f.join('\n'));
 };
 
-// Who Auto selects (and in which organization). Several profiles: ask which one, remember the answer.
-const chooseProfile = () => {
-  let list = getProfiles(cfg);
-  if (!list.length) {
-    const n = (prompt('Your name, i.e. the option to select in the person list (exactly as shown). It is remembered on this computer:') || '').trim();
-    if (!n) throw new Error('No name given.');
-    const g = (prompt('Organization to select (leave empty if not needed):') || '').trim();
-    list = [{ name: n, org: g }];
-    localStorage.setItem('autoProfiles', JSON.stringify(list));
-  }
-  if (list.length === 1) return list[0];
-  const last = parseInt(localStorage.getItem('autoProfileIdx') || '0', 10);
-  const n = parseInt(prompt('Which profile?\n' + list.map((p, i) => (i + 1) + '. ' + profileText(p)).join('\n') + '\n\nNumber:', String(Math.min(last, list.length - 1) + 1)), 10);
-  if (!(n >= 1 && n <= list.length)) throw new Error('No profile chosen.');
-  localStorage.setItem('autoProfileIdx', String(n - 1));
-  return list[n - 1];
-};
-
 // Selects text in a searchable list: open it, search, wait for the rows, click the one row that matches.
 // extra (e.g. the organization) must also occur in the row; with soft it only narrows the choice when rows show it.
 // Several matching rows are never guessed.
@@ -100,7 +82,7 @@ const pickFromList = async (g, text, extra, label, soft) => {
       stage = 'fill form';
       setVal(need('line2'), need('line1').value);
       setVal(need('line3'), C.extraLine);
-      const profile = hasUser || hasPerson || hasOrg ? chooseProfile() : null;
+      const profile = hasUser || hasPerson || hasOrg ? chooseProfile(cfg) : null;
       if (hasUser) {
         const sel = need('user');
         const o = [...sel.options].find(x => x.text.trim() === profile.name);

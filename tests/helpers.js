@@ -11,13 +11,14 @@ const useSource = fn => { source = fn; };
 const bookmarklet = name => (source ? source(name) : fs.readFileSync(path.join(__dirname, '..', 'dist', name + '.txt'), 'utf8')).replace(/^javascript:/, '');
 
 // Records every dialog (alert/confirm/prompt) and accepts it.
-// answers: { message fragment: answer for a prompt, or false to dismiss the dialog }
+// answers: { message fragment ('=' prefix: the whole message): answer for a prompt (a string, a function of the message, or false to dismiss) }
 function trackDialogs(context, dialogs, answers = {}) {
   const hook = page => page.on('dialog', d => {
     dialogs.push({ type: d.type(), message: d.message() });
-    const k = Object.keys(answers).find(x => d.message().includes(x));
+    const k = Object.keys(answers).find(x => (x.startsWith('=') ? d.message() === x.slice(1) : d.message().includes(x)));
     if (k !== undefined && answers[k] === false) return d.dismiss();
-    return d.accept(k === undefined ? undefined : answers[k]);
+    const ans = k === undefined ? undefined : answers[k];
+    return d.accept(typeof ans === 'function' ? ans(d.message()) : ans);
   });
   context.pages().forEach(hook);
   context.on('page', hook);
@@ -124,13 +125,14 @@ async function learnAll(page, context, { code = '5901234123457', skipUser = fals
 
 // Scans a code and runs Auto. With reload = true Auto is clicked again after every full page reload
 // (the way a person has to) until the print tab opens. Returns the print tab.
-async function autoRun(page, { code = '5909876543210', reload = false } = {}) {
+async function autoRun(page, { code = '5909876543210', reload = false, bm = 'auto', scan } = {}) {
   let popup = null;
   page.on('popup', p => { popup = p; });
-  await page.locator('[data-c="' + code + '"]').click();
+  if (scan) await page.locator(id('pt1:r1:0:it1::content')).fill(scan); // typed like a scanner
+  else await page.locator('[data-c="' + code + '"]').click();
   for (let i = 0; i < (reload ? 8 : 1) && !popup; i++) {
     const url0 = page.url();
-    await page.evaluate(bookmarklet('auto'));
+    await page.evaluate(bookmarklet(bm));
     const t0 = Date.now();
     while (!popup && page.url() === url0 && Date.now() - t0 < 30000) await page.waitForTimeout(200);
     if (!popup) await page.waitForLoadState('load');

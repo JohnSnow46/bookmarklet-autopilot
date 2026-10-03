@@ -5,11 +5,11 @@ if (!cfg && !(mine && mine.length)) { alert('Nothing learned yet. Run the Learn 
 const c = cfg || { steps: {}, opts: {}, rules: [] };
 
 const profiles = () => getProfiles(c).map((p, i) => (i + 1) + '. ' + profileText(p)).join('\n') || '(none: Auto asks on its first run)';
-const steps = Object.entries(c.steps || {}).map(([k, s]) => s.skipped
+const steps = c.macro ? c.macro.map((a, i) => (i + 1) + '. ' + say(a) + (a.confirm ? '   [asks "Save?"]' : '')) : Object.entries(c.steps || {}).map(([k, s]) => s.skipped
   ? k + ': (skipped)'
   : k + ': ' + (s.tag || '?') + (s.text ? ' "' + s.text + '"' : '') + (s.frame && s.frame.length ? ' [in iframe]' : '') + (s.alt ? ' [+fallback]' : '') + '\n    ' + s.sel);
 const o = c.opts || {};
-alert('Steps:\n' + steps.join('\n')
+alert((c.macro ? 'Recorded steps:\n' : 'Steps:\n') + steps.join('\n')
   + '\n\nAppend text: "' + (o.extraLine || '') + '"'
   + '\nAsk "Save?": ' + (o.confirmSave ? 'yes' : 'no')
   + '\nProfiles (' + ((mine && mine.length) ? 'personal, this computer' : 'from the configuration') + '):\n' + profiles()

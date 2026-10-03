@@ -166,19 +166,18 @@ const barButton = (b, text, fn) => {
 
 // Calls handler for mousedown/click (capture phase) in the page and in every same-origin iframe, including
 // frames that load later or reload. Returns a function that removes the handler again.
-const hookPicker = handler => {
+const hookPicker = (handler, types = ['mousedown', 'click']) => {
   const seen = new Set();
   const run = () => allDocs().forEach(d => {
     if (seen.has(d)) return;
     seen.add(d);
-    d.addEventListener('mousedown', handler, true);
-    d.addEventListener('click', handler, true);
+    types.forEach(t => d.addEventListener(t, handler, true));
   });
   run();
   const t = setInterval(run, 250);
   return () => {
     clearInterval(t);
-    seen.forEach(d => { try { d.removeEventListener('mousedown', handler, true); d.removeEventListener('click', handler, true); } catch (_) {} });
+    seen.forEach(d => { try { types.forEach(t => d.removeEventListener(t, handler, true)); } catch (_) {} });
   };
 };
 
@@ -273,4 +272,37 @@ const optSelector = el => {
   const cls = [...el.classList].filter(c => !/\d/.test(c) && c.length < 30).slice(0, 2);
   const role = el.getAttribute('role');
   return el.tagName.toLowerCase() + (role ? '[role="' + role + '"]' : '') + cls.map(c => '.' + CSS.escape(c)).join('');
+};
+
+// Who is selected (and in which organization). Several profiles: ask which one, remember the answer.
+const chooseProfile = cfg => {
+  let list = getProfiles(cfg);
+  if (!list.length) {
+    const n = (prompt('Your name, i.e. the option to select in the person list (exactly as shown). It is remembered on this computer:') || '').trim();
+    if (!n) throw new Error('No name given.');
+    const g = (prompt('Organization to select (leave empty if not needed):') || '').trim();
+    list = [{ name: n, org: g }];
+    localStorage.setItem('autoProfiles', JSON.stringify(list));
+  }
+  if (list.length === 1) return list[0];
+  const last = parseInt(localStorage.getItem('autoProfileIdx') || '0', 10);
+  const n = parseInt(prompt('Which profile?\n' + list.map((p, i) => (i + 1) + '. ' + profileText(p)).join('\n') + '\n\nNumber:', String(Math.min(last, list.length - 1) + 1)), 10);
+  if (!(n >= 1 && n <= list.length)) throw new Error('No profile chosen.');
+  localStorage.setItem('autoProfileIdx', String(n - 1));
+  return list[n - 1];
+};
+
+/* ---------- recorded steps (Record / Play) ---------- */
+const SAVE_RE = /^(save|zapisz|zatwierd[zź]\w*|submit)$/i;
+const modeText = m => ({ only: ' (the only row)', 'profile.name': ' (your name)', 'profile.org': ' (your organization)' }[m] || '');
+
+// A one-line description of a recorded step.
+const say = a => {
+  const l = a.loc ? a.loc.label : '', w = a.win ? ' [new tab]' : '';
+  if (a.t === 'click') return 'click ' + (a.text ? '"' + a.text + '"' : '[' + l + ']') + w;
+  if (a.t === 'row') return 'choose the list row "' + short(a.text) + '"' + modeText(a.mode) + w;
+  if (a.t === 'select') return 'choose "' + a.text + '" in "' + l + '"' + modeText(a.mode) + w;
+  const what = a.src === 'scan' ? 'the scanned code' : a.src === 'copy' ? 'a copy of "' + a.from.label + '"'
+    : a.src === 'profile.name' ? 'your name' : a.src === 'profile.org' ? 'your organization' : '"' + short(a.value || '') + '"';
+  return 'type ' + what + ' into "' + l + '"' + w;
 };
