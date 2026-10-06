@@ -1,8 +1,8 @@
 {
-  "name": "oracle-bookmarklets",
+  "name": "bookmarklet-autopilot",
   "version": "0.1.0",
   "private": true,
-  "description": "Bookmarklets that automate repetitive product entry in a web-based Oracle app (Learn / Auto / Validate)",
+  "description": "Record a repetitive routine in any web app once, then replay it with one click, using only browser bookmarklets",
   "scripts": {
     "build": "node build/build.js",
     "serve": "node build/serve.js",

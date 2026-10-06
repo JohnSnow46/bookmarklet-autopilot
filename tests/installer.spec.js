@@ -40,14 +40,14 @@ test('copy buttons copy the code (and the test code)', async ({ page }) => {
   expect(await page.evaluate(() => window.__clip)).toBe("javascript:alert('ok')");
 });
 
-test('the installer links to a working mock', async ({ page }) => {
+test('the installer links to a working demo app', async ({ page }) => {
   await page.goto(INSTALLER);
-  await page.locator('a', { hasText: 'test mock' }).click();
-  await expect(page).toHaveURL(/docs\/mock\/mock-oracle\.html/);
+  await page.locator('a', { hasText: 'demo app' }).click();
+  await expect(page).toHaveURL(/docs\/mock\/demo-app\.html/);
   await expect(page.locator('[id="view"] h2')).toHaveText('Product search');
 });
 
-test('bookmarklets taken from the installer links learn and run the process on the mock', async ({ browser }) => {
+test('bookmarklets taken from the installer links learn and run the process on the demo app', async ({ browser }) => {
   const s = await newSession(browser, { 'Text to append': 'Installer append', 'option to select': 'You (test)' });
   const page = await s.context.newPage();
   await page.goto(INSTALLER);

@@ -4,5 +4,5 @@ module.exports = defineConfig({
   timeout: 90000,
   workers: 1,
   use: { baseURL: 'http://localhost:8000', headless: true },
-  webServer: { command: 'node build/serve.js', url: 'http://localhost:8000/mock/mock-oracle.html', reuseExistingServer: true },
+  webServer: { command: 'node build/serve.js', url: 'http://localhost:8000/mock/demo-app.html', reuseExistingServer: true },
 });

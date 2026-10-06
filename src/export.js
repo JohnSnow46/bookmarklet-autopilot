@@ -1,4 +1,4 @@
-// Export: builds a Play (or Auto) bookmarklet with the configuration built in, to hand over to a colleague.
+// Export: builds a Play (or Auto) bookmarklet with the configuration built in, to share or to use on another computer.
 // The build substitutes the placeholders below with the sources of the Auto and Play bookmarklets (as strings).
 const AUTO = __AUTO__;
 const PLAY = __PLAY__;
@@ -8,7 +8,7 @@ const out = JSON.parse(JSON.stringify(cfg));
 out.opts = out.opts || {};
 const mine = getProfiles(cfg);
 out.opts.profiles = mine;
-if (mine.length && !confirm('Include your profile(s)?\n' + mine.map(profileText).join('\n') + '\n\nOK = include\nCancel = leave out, the colleague will be asked for their own on the first run')) out.opts.profiles = [];
+if (mine.length && !confirm('Include your profile(s)?\n' + mine.map(profileText).join('\n') + '\n\nOK = include\nCancel = leave out, whoever runs it will be asked for their own on the first run')) out.opts.profiles = [];
 // Show what is about to leave this computer: fixed texts typed or chosen in the recording, and the append text.
 const fixed = (out.macro || []).filter(a => (a.t === 'set' && !a.src) || (a.t !== 'click' && a.mode === 'fixed' && a.text)).map(say);
 if (out.opts.extraLine) fixed.push('append text "' + short(out.opts.extraLine) + '"');

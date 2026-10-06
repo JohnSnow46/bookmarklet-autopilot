@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Oracle Bookmarklets – installer</title>
+<title>Bookmarklet Autopilot – installer</title>
 <style>
   :root {
     --bg: #f4f6f8; --panel: #ffffff; --line: #d3dae1; --text: #1d2730; --muted: #5b6875;
@@ -41,13 +41,13 @@
 </head>
 <body>
 <main>
-  <h1>Oracle Bookmarklets</h1>
-  <p class="muted">Automate the repetitive scan → search → fill → save → print routine with plain browser bookmarks. No installation, no extensions.</p>
+  <h1>Bookmarklet Autopilot</h1>
+  <p class="muted">Record a repetitive routine in any web app once, then replay it with one click. Plain browser bookmarks: no installation, no extensions, nothing leaves the browser.</p>
 
-  <h2>1. Check that bookmarklets work on your computer</h2>
+  <h2>1. Check that bookmarklets work in your browser</h2>
   <div class="card">
     <p>Create a bookmark whose URL is exactly <code>javascript:alert('ok')</code> and click it on any web page.</p>
-    <p>A dialog saying <b>ok</b> means you can continue. If nothing happens, your IT policy blocks bookmarklets: stop here, that is a decision, not a bug.</p>
+    <p>A dialog saying <b>ok</b> means you can continue. If nothing happens, bookmarklets are disabled in this browser (for example by a managed browser policy) and the project cannot work there.</p>
     <p class="row"><button class="primary" data-copy-text="javascript:alert('ok')">Copy the test code</button><span class="ok" id="copied-test"></span></p>
   </div>
 
@@ -57,19 +57,19 @@
 
   <h2>3. Use them</h2>
   <ol>
-    <li>Open the application page and click <b>Learn</b>. Follow the bar at the top: <b>Ctrl+click</b> each element it asks for; a plain click works normally, so you can do the real process while teaching it. Use <b>Skip</b> for optional steps, <b>Back</b> to undo.</li>
-    <li>Check the summary, type the text to append and the list option, save.</li>
+    <li>Open the web app and click <b>Record</b>. Do the routine once, normally, then press <b>Stop and review</b> and answer the short questions (steps to remove, how to pick list values, before which steps to ask "Save?").</li>
+    <li>Run <b>Dry run</b> on each screen: it shows which recorded steps it can find and clicks nothing.</li>
+    <li>Every time after that: enter the input (type it or scan a barcode), click <b>Play</b>. For many items in a row use <b>Series</b>.</li>
     <li>Optional: use <b>Validate</b> to add checks (for example "this field equals that field").</li>
-    <li>Every day: scan a code into the search field, click <b>Auto</b>, confirm the system print dialog.</li>
-    <li>If the application reloads the whole page between steps, click <b>Auto</b> again after each reload; it continues where it stopped.</li>
-    <li>If the browser blocks the print tab, allow pop-ups for the site.</li>
+    <li>If the app reloads the whole page between steps, click <b>Play</b> again after each reload; it continues from what it sees.</li>
+    <li>If the browser blocks a new tab the routine opens, allow pop-ups for the site.</li>
   </ol>
-  <div class="note">Practise first on the <a href="mock/mock-oracle.html">test mock</a>. It imitates the process and shows an event log. Variants: <a href="mock/mock-oracle.html?variant=nolist">no User list</a>, <a href="mock/mock-oracle.html?variant=iframe">form in an iframe</a>, <a href="mock/mock-oracle.html?variant=reload">full page reloads</a>.</div>
-
+  <p class="muted">Learn and Auto are the advanced variant for a fixed lookup → copy → fill → save → print workflow, taught step by step with Ctrl+click.</p>
+  <div class="note">Practise first on the <a href="mock/demo-app.html">demo app</a>. It imitates a typical routine and shows an event log. Variants: <a href="mock/demo-app.html?variant=nolist">no User list</a>, <a href="mock/demo-app.html?variant=iframe">form in an iframe</a>, <a href="mock/demo-app.html?variant=reload">full page reloads</a>.</div>
   <h2>Safety</h2>
   <div class="card">
     <p>A bookmarklet runs with the full rights of the page you click it on, so read what you paste. The code is short and never talks to the network; the build refuses to produce code that does. Compare the SHA-256 of what you copied with the value shown under each button.</p>
-    <p>Get your manager's / IT's approval before using automation on a company system. Nothing learned is ever sent anywhere: it lives in this browser's <code>localStorage</code>. Never share a configuration export outside the company.</p>
+    <p>Nothing recorded or learned is ever sent anywhere: it lives in this browser's <code>localStorage</code>. An export contains the recording in readable form, so share it only with people who should see it.</p>
   </div>
   <p class="muted">Source and documentation: see the repository README and <code>docs/SECURITY.md</code>.</p>
 </main>

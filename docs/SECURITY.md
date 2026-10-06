@@ -28,10 +28,10 @@ types for you) and also the whole risk: the code you paste into a bookmark is tr
 | Values of fields | **shown** in the failure message of a rule (an alert on your screen) | Never stored or sent. |
 | Page content, product names, scanned codes | **not stored** | Learn only keeps captions for the steps that need them. |
 
-The configuration is not a secret, but it describes the structure of an internal system, so it must stay out of the repo
+The configuration is not a secret, but it describes the structure of the application it was made on, so keep it out of the repo
 (`.gitignore` covers common export/capture file names) and out of public places. **Export puts the configuration
 into the clipboard and into the exported code as base64. Base64 is encoding, not encryption**: anyone holding the code
-can read the configuration. Share it only through internal channels.
+can read the configuration. Share it only with people who should see it.
 
 ## Findings
 
@@ -45,36 +45,34 @@ can read the configuration. Share it only through internal channels.
 | 6 | Auto acts without a human looking at each step; a wrong learned element could save wrong data. | Medium (data quality) | Mitigated: "Save?" confirmation (default on), validation while learning, validation rules before Save/Generate, error detection after Save. Server-side validation in the application stays the authority. |
 | 7 | The installer page hands out code that people paste into their browser. A compromised repository or account would mean malicious code. | Medium | Mitigated: SHA-256 and a readable copy of each bookmarklet are shown on the page; see the owner's tasks below. |
 | 8 | `npm audit` | - | 0 known vulnerabilities (dev dependencies only). |
-| 9 | Git history: author identity is the GitHub no-reply address; no secrets, tokens or company data found. | - | Clean. |
+| 9 | Git history: author identity is the GitHub no-reply address; no secrets, tokens or application data found. | - | Clean. |
 | 10 | Export embeds the configuration as base64 in a code string that gets pasted and sent around. | Low | Documented above; Export asks whether to leave out the personal list option. |
 | 11 | The error heuristic (`role=alert`, `.error`, ...) can match an unrelated visible element. | Low | Auto only reacts to texts that were **not** visible before Save, and the learned error element has priority. A false positive stops Auto (safe direction). |
 | 12 | The "looks auto-generated" id check is a heuristic. | Info | Only a warning; the fallback selector reduces the impact. |
 | 14 | Validate put page-derived text (field labels) into the bar through `innerHTML`: a page controlling a label could inject markup into the bar. | Low (the page can already run script; matters under Trusted Types/strict CSP) | **Fixed**: text nodes only; regression test with a hostile label. |
 | 15 | Record stored typed values of every text field, including password fields. | Medium (credentials in localStorage) | **Fixed**: password and hidden fields are never recorded; the bar says so. Test checks that the secret is nowhere in localStorage. |
-| 16 | Record stored the text of picked list rows (product names, people) and the raw recording stayed in localStorage. | Medium (company data in storage and exports) | **Fixed**: row/list texts are kept only for a fixed choice; for *the only row / your name / your organization* they are dropped, and the raw recording (`autoRec`) is emptied after saving. |
+| 16 | Record stored the text of picked list rows (product names, people) and the raw recording stayed in localStorage. | Medium (application data in storage and exports) | **Fixed**: row/list texts are kept only for a fixed choice; for *the only row / your name / your organization* they are dropped, and the raw recording (`autoRec`) is emptied after saving. |
 | 17 | Export put fixed texts of the recording in the exported code without showing them. | Low-Medium | **Fixed**: Export lists every fixed text and the append text and asks before copying; Cancel copies nothing. |
 | 18 | Dry run must never change data. | - | By design: it only locates and outlines elements; a test checks that no field is typed into and nothing is clicked. |
 | 13 | Selecting a person in a searchable list could pick the wrong person (same name, two organizations). | Medium (data quality) | Mitigated: exactly one matching row is required, otherwise Auto stops, lists the rows and selects nothing. |
 
 ## Owner's tasks for the installer
 
-- Tag releases and give colleagues the tag URL, not a moving branch.
+- Tag releases and point users to the tag URL, not a moving branch.
 - Enable two-factor authentication on the GitHub account and branch protection on `main`.
-- Colleagues should copy the code once and keep working from their own bookmark; they should not re-copy blindly after updates without reading the changelog.
+- Users should copy the code once and keep working from their own bookmark; they should not re-copy blindly after updates without reading the changelog.
 - Re-run `npm run build` and `npm test` before every push: the installer and `dist/` are generated and tested together.
 
-## Organisational points (not technical)
+## Responsible use
 
-- A bookmarklet works only if IT policy allows `javascript:` URLs. If it is blocked, that is a decision, not a bug. **Do not look for workarounds.**
-- Automating clicks in a corporate application may be covered by an acceptable-use or automation policy even if it is technically possible.
-  Get explicit approval from the manager and, ideally, IT/security before relying on it. Be able to show what the code does.
-- Automated actions appear in the application's audit log under your account. You remain responsible for what is saved.
-- No company data may be put into this repository, including issues, screenshots and pull requests.
+- A bookmarklet works only if the browser allows `javascript:` URLs. Some managed browsers disable them; then the project does not work there and no workaround is attempted.
+- Automate only applications you are allowed to automate, and respect their terms of use. Be able to show what the code does.
+- Automated actions are made under your account. You remain responsible for what is saved.
+- Never put real application data into this repository, including issues, screenshots and pull requests.
 
 ## Pre-use checklist
 
 - [ ] Read `src/*.js` (or the built `dist/*.txt`) and confirm it only touches the page and `localStorage`.
 - [ ] Compare the SHA-256 shown by the installer with `dist/*.txt` of the tagged release.
-- [ ] Confirm approval from your manager / IT for this kind of automation.
-- [ ] Teach on a harmless record first; keep the "Save?" confirmation on until you trust the setup.
-- [ ] Never commit or post a configuration export from the real application.
+- [ ] Start with Dry run, then a harmless record; keep the "Save?" confirmation on until you trust the setup.
+- [ ] Never commit or post a configuration export from a real application.

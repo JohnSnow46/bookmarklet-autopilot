@@ -43,16 +43,16 @@ async function buildOne(name, built) {
 
 // What the installer page says about each bookmarklet.
 const INFO = {
-  record: ['Record', 'The easy way: do the process once, normally. Every click, typed value and choice is recorded.'],
-  play: ['Play', 'Repeats the recording. Scan a code first, then click Play.'],
-  series: ['Series', 'Many products in a row: after each run it waits for the next scan and runs again, until you press Stop.'],
+  record: ['Record', 'The easy way: do the routine once, normally. Every click, typed value and choice is recorded.'],
+  play: ['Play', 'Repeats the recording. Enter the input first (type or scan it), then click Play.'],
+  series: ['Series', 'Many items in a row: after each run it waits for the next input and runs again, until you press Stop.'],
   dryrun: ['Dry run', 'Safe first test: shows which recorded steps it can find on the current screen. Clicks and types nothing.'],
-  learn: ['Learn', 'Advanced: teach the process step by step with Ctrl+click.'],
+  learn: ['Learn', 'Advanced: teach a fixed lookup, fill, save and print workflow step by step with Ctrl+click.'],
   auto: ['Auto', 'Advanced: runs what Learn taught.'],
   validate: ['Validate', 'Add checks, for example "this field equals that field" or "not empty".'],
   check: ['Check', 'Run the "manual only" checks on the current page.'],
   show: ['Show', 'Show what has been learned or recorded, the run log, and change your profiles.'],
-  export: ['Export', 'Create a Play (or Auto) bookmarklet with your recording built in, to give to a colleague.'],
+  export: ['Export', 'Create a Play (or Auto) bookmarklet with your recording built in, to share or to use on another computer.'],
 };
 const esc = t => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
@@ -74,7 +74,7 @@ function installer(built) {
   const tpl = fs.readFileSync(path.join(__dirname, 'installer.template.html'), 'utf8');
   fs.mkdirSync(path.join(root, 'docs', 'mock'), { recursive: true });
   fs.writeFileSync(path.join(root, 'docs', 'index.html'), tpl.replace('{{ITEMS}}', () => items));
-  fs.copyFileSync(path.join(root, 'mock', 'mock-oracle.html'), path.join(root, 'docs', 'mock', 'mock-oracle.html'));
+  fs.copyFileSync(path.join(root, 'mock', 'demo-app.html'), path.join(root, 'docs', 'mock', 'demo-app.html'));
   fs.writeFileSync(path.join(root, 'docs', '.nojekyll'), '');
   console.log('docs/index.html  (installer)');
 }

@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const MOCK = '/mock/mock-oracle.html';
+const MOCK = '/mock/demo-app.html';
 const CTRL = { modifiers: ['Control'] };
 const id = s => '[id="' + s + '"]';
 

@@ -212,7 +212,7 @@ test('Show lists the recorded steps', async ({ browser }) => {
   expect(msg).toContain('click "Apply" [new tab]');
 });
 
-test('Export hands a recording to a colleague: one line, configuration built in', async ({ browser }) => {
+test('Export hands a recording to another computer: one line, configuration built in', async ({ browser }) => {
   const one = await newSession(browser);
   const page = await one.context.newPage();
   await recordProcess(page);
