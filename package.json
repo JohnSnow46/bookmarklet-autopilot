@@ -6,7 +6,8 @@
   "scripts": {
     "build": "node build/build.js",
     "serve": "node build/serve.js",
-    "test": "playwright test"
+    "test": "playwright test",
+    "shots": "node build/guide-shots.js"
   },
   "devDependencies": {
     "@playwright/test": "^1.63.0",

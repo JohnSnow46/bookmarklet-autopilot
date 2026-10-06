@@ -13,6 +13,8 @@ Record a repetitive routine in any web application once, then replay it with one
 Typical uses: data entry that repeats the same screens for every item, look-up-and-copy chores, label or document
 printing flows, anything where you click through the same form many times a day.
 
+**New here?** Follow the [step-by-step guide with screenshots](docs/GUIDE.md).
+
 ## Why bookmarklets
 
 A bookmarklet is a bookmark whose URL is `javascript:…` code. It runs inside the page you are on,
