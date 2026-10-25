@@ -9,8 +9,13 @@ const SCRIPTS = ['record', 'play', 'series', 'dryrun', 'learn', 'auto', 'validat
 // Bookmarklets built from another source with a constant in front: { name: [source, prefix] }.
 const VARIANTS = { series: ['play', "const PLAY_MODE='series';"], dryrun: ['play', "const PLAY_MODE='dry';"] };
 
-// Security guard: bookmarklets must never talk to the network or run dynamic code.
-const FORBIDDEN = /\b(fetch|XMLHttpRequest|sendBeacon|WebSocket|EventSource|eval|importScripts)\b|new Function|document\.cookie|import\(/;
+// Security guard: bookmarklets must never talk to the network, load anything, navigate away or run dynamic code.
+const FORBIDDEN = new RegExp([
+  /\b(fetch|XMLHttpRequest|sendBeacon|WebSocket|EventSource|eval|importScripts|Worker|SharedWorker|serviceWorker|postMessage|srcdoc)\b/.source,
+  /new Function|new Image\b|document\.cookie|import\(|document\.write|\.href=|location\.(assign|replace)/.source,
+  // elements that fetch a URL as soon as they exist
+  /createElement\(["'`](script|iframe|frame|img|link|object|embed|audio|video|source|style)["'`]\)/.source,
+].join('|'));
 
 function check(name, code) {
   const bad = [];
@@ -18,6 +23,7 @@ function check(name, code) {
   if (code.includes('%')) bad.push('a percent character');
   if (/[\r\n]/.test(code)) bad.push('a newline');
   if (!code.startsWith('javascript:')) bad.push('missing javascript: prefix');
+  if (/__(AUTO|PLAY)__/.test(code)) bad.push('a placeholder the build did not fill');
   const m = code.match(FORBIDDEN);
   if (m) bad.push('forbidden API: ' + m[0]);
   if (bad.length) throw new Error('Bookmarklet "' + name + '" is invalid: ' + bad.join(', '));
@@ -79,13 +85,20 @@ function installer(built) {
   console.log('docs/index.html  (installer)');
 }
 
-(async () => {
-  fs.mkdirSync(path.join(root, 'dist'), { recursive: true });
+// Every bookmarklet, built in memory: { name: code }.
+async function buildAll() {
   const built = {};
+  for (const n of SCRIPTS) built[n] = await buildOne(n, built);
+  return built;
+}
+
+module.exports = { check, FORBIDDEN, buildAll, SCRIPTS };
+if (require.main === module) (async () => {
+  fs.mkdirSync(path.join(root, 'dist'), { recursive: true });
+  const built = await buildAll();
   for (const n of SCRIPTS) {
-    const code = built[n] = await buildOne(n, built);
-    fs.writeFileSync(path.join(root, 'dist', n + '.txt'), code);
-    console.log('dist/' + n + '.txt  ' + code.length + ' chars');
+    fs.writeFileSync(path.join(root, 'dist', n + '.txt'), built[n]);
+    console.log('dist/' + n + '.txt  ' + built[n].length + ' chars');
   }
   installer(built);
 })().catch(e => { console.error('BUILD ERROR: ' + e.message); process.exit(1); });
