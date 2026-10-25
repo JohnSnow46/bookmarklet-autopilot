@@ -3,8 +3,11 @@ const RK = 'autoRec';
 const CLICKABLE = 'button,a,input,select,textarea,[role=button],[role=option],[role=menuitem],summary,li,tr,td';
 const win = window.opener ? 1 : 0; // 1 = this is the new tab opened by the page
 
-const prevCfg = JSON.parse(localStorage.getItem('autoCfg') || 'null');
-let rec = JSON.parse(localStorage.getItem(RK) || 'null');
+let prevCfg;
+try { prevCfg = loadCfg(); } catch (_) { prevCfg = null; } // a damaged configuration is replaced by the new recording
+let rec = getJSON(RK);
+if (!store()) { alert('The browser blocks storage on this page, so nothing can be recorded here.'); return; }
+if (rec && !Array.isArray(rec.actions)) rec = null; // a damaged recording in progress: start a new one
 if (rec && rec.actions && rec.actions.length && !rec.done) {
   if (!confirm('Continue the recording (' + rec.actions.length + ' steps so far)? Cancel = start a new one')) rec = null;
 } else if (rec && rec.done && !win) {
@@ -13,7 +16,7 @@ if (rec && rec.actions && rec.actions.length && !rec.done) {
 }
 if (!rec || !rec.actions) rec = { actions: [], done: false };
 const A = rec.actions;
-const save = () => localStorage.setItem(RK, JSON.stringify(rec));
+const save = () => setJSON(RK, rec);
 
 const b = makeBar('__record');
 let off = null, notice = '';
@@ -131,12 +134,12 @@ const review = () => {
   steps.forEach(a => { if (a.src === 'scan') delete a.value; });
 
   if (!confirm('Save this recording?\n' + steps.map((a, i) => (i + 1) + '. ' + say(a) + (a.confirm ? '   [asks "Save?"]' : '')).join('\n'))) return;
-  localStorage.setItem('autoCfg', JSON.stringify({
+  if (!setJSON('autoCfg', {
     v: 4,
     macro: steps,
     opts: { profiles, confirmSave: true },
     rules: (prevCfg && prevCfg.v === 4 && prevCfg.rules) || [],
-  }));
+  })) { alert('The recording could not be stored: the browser storage is full or blocked.'); return; }
   rec.done = true;
   rec.actions = []; // the raw recording (typed values, row texts) does not stay behind
   save();
@@ -152,7 +155,7 @@ const draw = () => {
   if (notice) b.appendChild(document.createTextNode(' ' + notice));
   barButton(b, 'Stop and review', review);
   barButton(b, 'Undo last', () => { A.pop(); save(); draw(); });
-  barButton(b, 'Cancel recording', () => { localStorage.removeItem(RK); quit(); });
+  barButton(b, 'Cancel recording', () => { drop(RK); quit(); });
 };
 
 off = hookPicker(e => (e.type === 'click' ? onClick(e) : onChange(e)), ['click', 'change']);

@@ -6,6 +6,32 @@ const ERR_SEL = '[role="alert"],.error,.errors,.err,.alert-danger,.alert-error,.
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
+/* ---------- storage: may be blocked (sandboxed frames, strict settings), full, or hold damaged data ---------- */
+const store = ses => { try { return ses ? sessionStorage : localStorage; } catch (_) { return null; } };
+// Parsed value under k: null when there is none, undefined when the storage is blocked or the text is damaged.
+const getJSON = (k, ses) => { try { return JSON.parse(store(ses).getItem(k) || 'null'); } catch (_) { return undefined; } };
+// false when it could not be written.
+const setJSON = (k, v, ses) => { try { store(ses).setItem(k, JSON.stringify(v)); return true; } catch (_) { return false; } };
+const drop = (k, ses) => { try { store(ses).removeItem(k); } catch (_) {} };
+
+// Checks a configuration (saved or built in); null passes (callers say what to do first). Throws a readable error.
+const okCfg = c => {
+  if (c === undefined) throw new Error('The saved configuration cannot be read: the browser blocks storage on this page, or the data is damaged. Record (or Learn) again.');
+  if (c === null) return null;
+  if (typeof c !== 'object' || typeof c.v !== 'number') throw new Error('The configuration is damaged. Record (or Learn) again.');
+  if (c.v > 4) throw new Error('The configuration was made by a newer version of the bookmarklets. Update your bookmarklets.');
+  return c;
+};
+const loadCfg = () => okCfg(getJSON('autoCfg'));
+// The configuration built into an exported bookmarklet (EMBED), else the saved one.
+const embeddedOrSaved = embed => {
+  if (embed === undefined) return loadCfg();
+  let c;
+  try { c = JSON.parse(dec(embed)); } catch (_) { c = undefined; }
+  if (c === undefined) throw new Error('The configuration built into this bookmarklet is damaged. Export it again.');
+  return okCfg(c);
+};
+
 const waitFor = async (fn, what, t = 20000) => {
   const t0 = Date.now();
   while (Date.now() - t0 < t) {
@@ -250,10 +276,8 @@ const errorTexts = errStep => {
 /* ---------- profiles (who / which organization Auto selects) and searchable lists ---------- */
 // Personal profiles of this computer win over the ones in the configuration.
 const getProfiles = cfg => {
-  try {
-    const p = JSON.parse(localStorage.getItem('autoProfiles') || 'null');
-    if (p && p.length) return p;
-  } catch (_) {}
+  const p = getJSON('autoProfiles');
+  if (Array.isArray(p) && p.length) return p;
   return (cfg.opts && cfg.opts.profiles) || [];
 };
 const profileText = p => p.name + (p.org ? ' / ' + p.org : '');
@@ -282,13 +306,13 @@ const chooseProfile = cfg => {
     if (!n) throw new Error('No name given.');
     const g = (prompt('Organization to select (leave empty if not needed):') || '').trim();
     list = [{ name: n, org: g }];
-    localStorage.setItem('autoProfiles', JSON.stringify(list));
+    setJSON('autoProfiles', list);
   }
   if (list.length === 1) return list[0];
-  const last = parseInt(localStorage.getItem('autoProfileIdx') || '0', 10);
+  const last = parseInt(getJSON('autoProfileIdx') || 0, 10) || 0;
   const n = parseInt(prompt('Which profile?\n' + list.map((p, i) => (i + 1) + '. ' + profileText(p)).join('\n') + '\n\nNumber:', String(Math.min(last, list.length - 1) + 1)), 10);
   if (!(n >= 1 && n <= list.length)) throw new Error('No profile chosen.');
-  localStorage.setItem('autoProfileIdx', String(n - 1));
+  setJSON('autoProfileIdx', n - 1);
   return list[n - 1];
 };
 

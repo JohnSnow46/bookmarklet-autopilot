@@ -22,9 +22,11 @@ const STEPS = [
   { key: 'error', desc: 'an error message of the application (only if one is on screen now, otherwise Skip)', type: 'any', optional: true },
 ];
 const K = 'autoLearn';
-const prevCfg = JSON.parse(localStorage.getItem('autoCfg') || 'null');
-let st = JSON.parse(localStorage.getItem(K) || 'null');
-if (st && !st.steps) st = null; // old learning-state format
+let prevCfg;
+try { prevCfg = loadCfg(); } catch (_) { prevCfg = null; } // a damaged configuration is replaced by the new one
+if (!store()) { alert('The browser blocks storage on this page, so nothing can be learned here.'); return; }
+let st = getJSON(K);
+if (st && (typeof st.steps !== 'object' || typeof st.i !== 'number')) st = null; // old format or damaged
 
 if (st && st.done) {
   if (!confirm('A configuration already exists. Learn from scratch?')) return;
@@ -35,7 +37,7 @@ if (st && st.done) {
 if (!st) st = { i: 0, steps: {}, done: false };
 
 const b = makeBar('__learn');
-const store = () => localStorage.setItem(K, JSON.stringify(st));
+const keep = () => setJSON(K, st);
 
 // Everything suspicious about the picked element; the user is asked to confirm when this is not empty.
 const warnings = (el, key, type, sel, frame) => {
@@ -76,7 +78,7 @@ const pick = e => {
   setTimeout(() => { el.style.outline = ''; }, 800);
   st.i++;
   if (key === 'user') skipGroup('person'); // a normal drop-down needs no searchable person list
-  store();
+  keep();
   draw();
 };
 
@@ -88,7 +90,7 @@ const back = () => {
     st.i--;
     delete st.steps[STEPS[st.i].key];
   } while (st.i > 0 && STEPS[st.i].group && STEPS[st.i - 1].group === STEPS[st.i].group && (st.steps[STEPS[st.i - 1].key] || {}).skipped);
-  store();
+  keep();
   draw();
 };
 
@@ -130,14 +132,14 @@ const finish = () => {
   if (!confirm('Check the configuration:\n' + lines.join('\n') + '\n\nAppend text: "' + extra + '"' + (profiles.length ? '\nProfile: ' + profileText(profiles[0]) : '')
     + '\n\nValidation rules:\n' + rules.map(ruleText).join('\n') + '\n\nSave it?')) return;
   const confirmSave = confirm('Ask "Save?" before every Save? (OK = yes, Cancel = no)');
-  localStorage.setItem('autoCfg', JSON.stringify({
+  if (!setJSON('autoCfg', {
     v: 3,
     steps: st.steps,
     opts: { extraLine: extra, profiles, confirmSave },
     rules,
-  }));
+  })) { alert('The configuration could not be stored: the browser storage is full or blocked.'); return; }
   st.done = true;
-  store();
+  keep();
   draw();
 };
 
@@ -165,7 +167,7 @@ const draw = () => {
     barButton(b, label, () => {
       if (s.group && !s.skipOwn) skipGroup(s.group);
       else { st.steps[s.key] = { skipped: true }; st.i++; }
-      store();
+      keep();
       draw();
     });
   }

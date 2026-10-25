@@ -1,9 +1,10 @@
 // Validate: build validation rules with Ctrl+click, stored in the configuration (autoCfg.rules).
 const CK = 'autoCfg';
-const cfg = JSON.parse(localStorage.getItem(CK) || 'null') || { v: 3, steps: {}, opts: {}, rules: [] };
+let cfg;
+try { cfg = loadCfg() || { v: 3, steps: {}, opts: {}, rules: [] }; } catch (e) { alert(e.message); return; }
 if (cfg.v !== 3 && cfg.v !== 4) { alert('The configuration is in an old format. Run Learn again.'); return; }
-cfg.rules = cfg.rules || [];
-const save = () => localStorage.setItem(CK, JSON.stringify(cfg));
+cfg.rules = Array.isArray(cfg.rules) ? cfg.rules : [];
+const save = () => { if (!setJSON(CK, cfg)) alert('The rule could not be stored: the browser blocks storage on this page or it is full.'); };
 
 const b = makeBar('__validate');
 let off = null; // removes the active Ctrl+click handler

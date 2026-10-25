@@ -1,5 +1,6 @@
 // EMBED is defined only by an exported bookmarklet (Export): then the configuration is built in.
-const cfg = typeof EMBED !== 'undefined' ? JSON.parse(dec(EMBED)) : JSON.parse(localStorage.getItem('autoCfg') || 'null');
+let cfg;
+try { cfg = embeddedOrSaved(typeof EMBED !== 'undefined' ? EMBED : undefined); } catch (e) { alert(e.message); return; }
 if (!cfg || !cfg.steps || !cfg.steps.search) { alert('Run the Learn bookmarklet first.'); return; }
 if (cfg.v !== 3) { alert('The configuration is in an old format. Run Learn again.'); return; }
 const S = cfg.steps, C = cfg.opts || {}, R = cfg.rules || [];

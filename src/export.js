@@ -2,7 +2,8 @@
 // The build substitutes the placeholders below with the sources of the Auto and Play bookmarklets (as strings).
 const AUTO = __AUTO__;
 const PLAY = __PLAY__;
-const cfg = JSON.parse(localStorage.getItem('autoCfg') || 'null');
+let cfg;
+try { cfg = loadCfg(); } catch (e) { alert(e.message); return; }
 if (!cfg || !(cfg.macro || (cfg.steps && cfg.steps.search))) { alert('Nothing learned yet. Run the Learn bookmarklet first.'); return; }
 const out = JSON.parse(JSON.stringify(cfg));
 out.opts = out.opts || {};

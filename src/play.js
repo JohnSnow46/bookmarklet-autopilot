@@ -3,7 +3,8 @@
 //   Play (once) - one run;  Series - after each run waits for the next scan and runs again;
 //   Dry run - checks which steps it can find on the current screen, highlights them, clicks and types nothing.
 const MODE = typeof PLAY_MODE !== 'undefined' ? PLAY_MODE : 'once';
-const cfg = typeof EMBED !== 'undefined' ? JSON.parse(dec(EMBED)) : JSON.parse(localStorage.getItem('autoCfg') || 'null');
+let cfg;
+try { cfg = embeddedOrSaved(typeof EMBED !== 'undefined' ? EMBED : undefined); } catch (e) { alert(e.message); return; }
 if (!cfg || cfg.v !== 4 || !cfg.macro) { alert('Nothing recorded yet. Use the Record bookmarklet first.'); return; }
 const M = cfg.macro, O = cfg.opts || {}, R = cfg.rules || [];
 const SCAN = M.find(a => a.src === 'scan');
@@ -11,14 +12,12 @@ const SCAN = M.find(a => a.src === 'scan');
 // The page may reload in the middle (and this script with it): clicking Play again continues for 60 seconds.
 const PK = 'playState';
 const readState = () => {
-  try {
-    const s = JSON.parse(sessionStorage.getItem(PK) || 'null');
-    return s && s.n === M.length && Date.now() - s.t < 60000 ? s : null;
-  } catch (_) { return null; }
+  const s = getJSON(PK, true);
+  return s && s.n === M.length && Date.now() - s.t < 60000 ? s : null;
 };
 let t0 = Date.now(); // start of the current run (kept across reloads for the log)
-const writeState = (i, p) => sessionStorage.setItem(PK, JSON.stringify({ i, n: M.length, t: Date.now(), p, t0 }));
-const clearState = () => sessionStorage.removeItem(PK);
+const writeState = (i, p) => setJSON(PK, { i, n: M.length, t: Date.now(), p, t0 }, true);
+const clearState = () => drop(PK, true);
 
 const text = (v, p) => (v === 'profile.name' ? p.name : v === 'profile.org' ? p.org : '');
 const press = el => {
@@ -131,11 +130,10 @@ const run = async st => {
 
 // Run log on this computer: time, duration, result and the step where it stopped. No codes, products or people.
 const log = (result, e) => {
-  let L = [];
-  try { L = JSON.parse(localStorage.getItem('autoLog') || '[]'); } catch (_) {}
+  const prev = getJSON('autoLog'), L = Array.isArray(prev) ? prev : []; // a damaged log starts again
   L.push({ at: new Date().toISOString(), ms: Date.now() - t0, result, mode: MODE,
     step: result === 'stopped' ? run.stage : '', why: e ? String(e.message).split(/[:\n]/)[0].slice(0, 80) : '' });
-  localStorage.setItem('autoLog', JSON.stringify(L.slice(-500)));
+  setJSON('autoLog', L.slice(-500)); // a full or blocked storage must not hide why the run stopped
 };
 
 // Dry run: which steps can be found on the screen as it is now. Nothing is clicked or typed.

@@ -1,6 +1,7 @@
 // Show: a readable summary of the saved configuration, and the profiles (who / which organization Auto selects).
-const cfg = JSON.parse(localStorage.getItem('autoCfg') || 'null');
-const mine = (() => { try { return JSON.parse(localStorage.getItem('autoProfiles') || 'null'); } catch (_) { return null; } })();
+let cfg;
+try { cfg = loadCfg(); } catch (e) { alert(e.message); return; }
+const mine = getJSON('autoProfiles');
 if (!cfg && !(mine && mine.length)) { alert('Nothing learned yet. Run the Learn bookmarklet first.'); return; }
 const c = cfg || { steps: {}, opts: {}, rules: [] };
 
@@ -16,9 +17,8 @@ alert((c.macro ? 'Recorded steps:\n' : 'Steps:\n') + steps.join('\n')
   + '\n\nValidation rules:\n' + ((c.rules || []).map((r, i) => (i + 1) + '. ' + ruleText(r)).join('\n') || '(none)'));
 
 // Run log (written by Play and Series): counts, average time, where runs stopped.
-let L = [];
-try { L = JSON.parse(localStorage.getItem('autoLog') || '[]'); } catch (_) {}
-if (L.length) {
+const L = getJSON('autoLog') || [];
+if (Array.isArray(L) && L.length) {
   const day = new Date().toISOString().slice(0, 10);
   const ok = L.filter(x => x.result === 'ok'), today = L.filter(x => x.at.slice(0, 10) === day);
   const avg = ok.length ? Math.round(ok.reduce((s, x) => s + x.ms, 0) / ok.length / 1000) : 0;
@@ -30,7 +30,7 @@ if (L.length) {
     + 'All: ' + ok.length + ' completed, ' + L.filter(x => x.result === 'stopped').length + ' stopped, ' + L.filter(x => x.result === 'cancelled').length + ' cancelled at "Save?"\n'
     + 'Average time of a completed run: ' + avg + ' s'
     + (top.length ? '\n\nWhere runs stopped most often:\n' + top.join('\n') : ''));
-  if (!confirm('Keep the run log? (OK = keep, Cancel = clear it)')) localStorage.removeItem('autoLog');
+  if (!confirm('Keep the run log? (OK = keep, Cancel = clear it)')) drop('autoLog');
 }
 
 // Profiles are personal to this computer: they override the ones in the configuration.
@@ -49,7 +49,7 @@ if (confirm('Change the profiles (who and which organization Auto selects)?')) {
       if (parts[0].trim()) list.push({ name: parts[0].trim(), org: parts.slice(1).join(';').trim() });
     }
   }
-  if (list.length) localStorage.setItem('autoProfiles', JSON.stringify(list)); else localStorage.removeItem('autoProfiles');
-  localStorage.removeItem('autoProfileIdx');
+  if (list.length) setJSON('autoProfiles', list); else drop('autoProfiles');
+  drop('autoProfileIdx');
   alert('Profiles now:\n' + profiles());
 }
