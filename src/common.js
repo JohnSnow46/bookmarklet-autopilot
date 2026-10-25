@@ -54,7 +54,7 @@ const waitForOr = async (ok, bad, what, t = 20000) => {
     if (e) throw new Error('The application reported an error after Save: ' + e);
     await sleep(150);
   }
-  throw new Error('Element did not appear: ' + what);
+  throw Object.assign(new Error('Element did not appear: ' + what), { timeout: true });
 };
 
 // Sets the value with the native setter and fires the events the framework listens to.
@@ -110,6 +110,27 @@ const locate = (c, d = document) => {
   const m = altMatches(c, dd);
   return m.length === 1 ? m[0] : null;
 };
+
+// Why the element of a stored locator cannot be used right now ('' when it can). text: the caption it must show.
+const whyNot = (c, d = document, text) => {
+  const dd = docFor(c.frame, d);
+  if (!dd) return c.frame && c.frame.length ? 'its iframe is not reachable (not loaded, or from another site)' : 'not on this screen';
+  let el = null;
+  try { el = dd.querySelector(c.sel); } catch (_) {}
+  if (!el) {
+    const m = altMatches(c, dd);
+    if (m.length > 1) return 'not on this screen as recorded, and its fallback selector matches ' + m.length + ' elements';
+    el = m[0];
+  }
+  if (!el) return 'not on this screen';
+  if (!shown(el)) return 'found, but hidden';
+  if (el.disabled) return 'found, but disabled';
+  const cap = norm(el.textContent || el.value || '');
+  if (text && cap !== text) return 'found, but its caption is "' + short(cap) + '" instead of "' + text + '"';
+  return '';
+};
+// The element of a stored locator when it can be used now (visible, enabled, right caption), else null.
+const usable = (c, d, text) => (whyNot(c, d, text) ? null : locate(c, d));
 
 // Finds the visible, enabled element stored under key k (null if it is not there).
 const find = (cfg, k, d = document) => {

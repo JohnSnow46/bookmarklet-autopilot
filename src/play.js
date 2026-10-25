@@ -35,6 +35,7 @@ const macroProblem = M => {
 if (!cfg.macro.length) { alert('The recording has no steps. Record it again.'); return; }
 const M = cfg.macro, O = cfg.opts || {}, R = Array.isArray(cfg.rules) ? cfg.rules : [];
 const SCAN = M.find(a => a.src === 'scan');
+const WAIT = (O.waitSec >= 1 && O.waitSec <= 600 ? O.waitSec : 30) * 1000; // how long a step waits for its element
 
 // The page may reload in the middle (and this script with it): clicking Play again continues for 60 seconds.
 const PK = 'playState';
@@ -88,15 +89,18 @@ const run = async st => {
       run.stage = 'step ' + (i + 1) + ' (' + say(a) + ')';
       writeState(i, profile); // an interrupted step is retried; a click that went through is not repeated (see below)
       const root = () => (a.win ? wins[1] && wins[1].document : document);
-      const wait = (fn, what, t = 30000) => waitForOr(() => { const d = root(); return d ? fn(d) : null; },
-        () => (watch ? errorTexts().find(x => !watch.includes(x)) : null), what, t);
+      // Waits until fn finds what it needs; on a timeout why() says what is wrong (hidden, disabled, ambiguous...).
+      const wait = (fn, what, why) => waitForOr(() => { const d = root(); return d ? fn(d) : null; },
+        () => (watch ? errorTexts().find(x => !watch.includes(x)) : null), what, WAIT).catch(e => {
+        if (!e.timeout) throw e;
+        const d = root();
+        throw new Error('Cannot use ' + what + ': ' + (d ? why(d) : 'the new tab is not open') + ' (waited ' + WAIT / 1000 + ' s).');
+      });
+      const element = (c, what, text) => wait(d => usable(c, d, text), what, d => whyNot(c, d, text) || 'it kept changing');
       const known = errorTexts();
 
       if (a.t === 'click') {
-        const el = await wait(d => {
-          const e = locate(a.loc, d);
-          return e && !e.disabled && shown(e) && (!a.text || norm(e.textContent || e.value || '') === a.text) ? e : null;
-        }, a.text ? '"' + a.text + '"' : '[' + a.loc.label + ']');
+        const el = await element(a.loc, a.text ? '"' + a.text + '"' : '[' + a.loc.label + ']', a.text);
         if (a.confirm) {
           const f = runRules(R, 'beforeSave', root());
           if (f.length) throw new Error('Validation failed, nothing was saved.\n' + f.join('\n'));
@@ -114,7 +118,8 @@ const run = async st => {
           steady = now.length && now.length === last ? steady + 1 : 0; // wait until the list stops changing
           last = now.length;
           return steady >= 2;
-        }, 'the list row' + (a.text ? ' "' + short(a.text) + '"' : ''), 20000);
+        }, 'the list row' + (a.text ? ' "' + short(a.text) + '"' : ''),
+        d => (whyNot(a.box, d) ? 'the list is ' + whyNot(a.box, d) : now.length ? 'the list kept changing' : 'no row of the list matches'));
         if (now.length > 1) {
           throw new Error('More than one row matches:\n' + now.map(([r], k) => (k + 1) + ') ' + norm(r.textContent)).join('\n')
             + '\nNothing was selected. Choose by hand, or add your organization to the profile (Show).');
@@ -123,7 +128,7 @@ const run = async st => {
         writeState(i + 1, profile);
         await sleep(300);
       } else if (a.t === 'select') {
-        const el = await wait(d => { const e = locate(a.loc, d); return e && !e.disabled && shown(e) ? e : null; }, '"' + a.loc.label + '"');
+        const el = await element(a.loc, '"' + a.loc.label + '"');
         watch = null;
         const name = a.mode.startsWith('profile') ? text(a.mode, profile) : a.text;
         const opts = [...el.options];
@@ -132,14 +137,14 @@ const run = async st => {
         setVal(el, o.value);
         if (norm(readVal(el)) !== norm(o.text)) throw new Error('The list "' + a.loc.label + '" did not keep the choice: it shows "' + readVal(el) + '".');
       } else { // set
-        const el = await wait(d => { const e = locate(a.loc, d); return e && !e.disabled && shown(e) ? e : null; }, '"' + a.loc.label + '"');
+        const el = await element(a.loc, '"' + a.loc.label + '"');
         watch = null;
         if (a.src === 'scan') {
           if (!el.value.trim()) throw new Error('Scan a code into "' + a.loc.label + '" first.');
         } else {
           let v = a.value;
           if (a.src === 'copy') {
-            const from = await wait(d => locate(a.from, d), '"' + a.from.label + '"');
+            const from = await wait(d => locate(a.from, d), '"' + a.from.label + '"', d => whyNot(a.from, d) || 'it kept changing');
             v = readVal(from);
           } else if (a.src) v = text(a.src, profile);
           if (v === undefined || (a.src && !v.trim())) throw new Error('There is nothing to type into "' + a.loc.label + '".');
@@ -172,11 +177,11 @@ const dryRun = async () => {
     if (a.win) res = 'in the new tab, not checked';
     else if (a.t === 'row') {
       const n = listRows(a, document, profile).length;
-      res = !locate(a.box) ? 'list not on this screen' : n === 1 ? 'OK, 1 matching row' : n + ' matching rows' + (n ? ' (Play would stop)' : '');
+      const why = locate(a.box) ? '' : whyNot(a.box);
+      res = why ? 'list ' + why : n === 1 ? 'OK, 1 matching row' : n + ' matching rows' + (n ? ' (Play would stop)' : '');
     } else {
-      const el = locate(a.loc);
-      const ok = el && shown(el) && !el.disabled && (a.t !== 'click' || !a.text || norm(el.textContent || el.value || '') === a.text);
-      res = !el ? 'not on this screen' : !ok ? 'found, but hidden, disabled or with another caption' : 'OK';
+      const why = whyNot(a.loc, document, a.t === 'click' ? a.text : ''), el = locate(a.loc), ok = !why;
+      res = why || 'OK';
       if (ok) {
         el.scrollIntoView({ block: 'center' });
         el.style.outline = '3px solid rgb(46,125,50)';

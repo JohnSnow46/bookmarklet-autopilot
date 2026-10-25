@@ -72,6 +72,35 @@ test('a fallback selector is used only while it matches exactly one element', as
   expect(await waitDialog(s.dialogs, 'Dry run')).not.toContain('"Product code": OK');
 });
 
+const SEARCH_BTN = { frame: [], sel: '[id="pt1:r1:0:cb1"]', alt: '', label: 'Search' };
+const SCAN = { t: 'set', win: 0, src: 'scan', loc: { frame: [], sel: '[id="pt1:r1:0:it1::content"]', alt: '', label: 'Product code' } };
+// Saves a recording with a short wait, so that a step that cannot go on gives up after 2 seconds.
+const saveMacro = (page, macro, opts = {}) => page.evaluate(([m, o]) => localStorage.setItem('autoCfg',
+  JSON.stringify({ v: 4, macro: m, opts: { waitSec: 2, confirmSave: true, ...o }, rules: [] })), [macro, opts]);
+
+test('when Play gives up waiting it says why the element cannot be used', async ({ browser }) => {
+  const s = await newSession(browser);
+  const page = await s.context.newPage();
+  const cases = [
+    [[SCAN, { t: 'click', win: 0, loc: SEARCH_BTN, text: 'Search' }], p => p.evaluate(() => { document.getElementById('pt1:r1:0:cb1').disabled = true; }),
+      'Cannot use "Search": found, but disabled (waited 2 s)'],
+    [[SCAN, { t: 'click', win: 0, loc: SEARCH_BTN, text: 'Find' }], null, 'Cannot use "Find": found, but its caption is "Search" instead of "Find"'],
+    [[SCAN, { t: 'click', win: 0, loc: SEARCH_BTN, text: 'Search' }], p => p.evaluate(() => { document.getElementById('pt1:r1:0:cb1').style.display = 'none'; }),
+      'Cannot use "Search": found, but hidden'],
+    [[SCAN_BY_NAME], p => nameTheSearchField(p, 1), 'its fallback selector matches 2 elements'],
+    [[SCAN, { t: 'click', win: 0, loc: { ...SEARCH_BTN, sel: '[id="gone"]' }, text: 'Search' }], null, 'Cannot use "Search": not on this screen'],
+  ];
+  for (const [macro, prep, msg] of cases) {
+    await page.goto(MOCK);
+    await saveMacro(page, macro);
+    await page.locator('[data-c="5909876543210"]').click();
+    if (prep) await prep(page);
+    s.dialogs.length = 0;
+    await page.evaluate(bookmarklet('play'));
+    expect(await waitDialog(s.dialogs, 'Play stopped', 10000)).toContain(msg);
+  }
+});
+
 test('Record and Learn start over when their saved state is damaged', async ({ browser }) => {
   const s = await newSession(browser);
   const page = await s.context.newPage();
