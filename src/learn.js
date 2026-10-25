@@ -23,7 +23,10 @@ const STEPS = [
 ];
 const K = 'autoLearn';
 let prevCfg;
-try { prevCfg = loadCfg(); } catch (_) { prevCfg = null; } // a damaged configuration is replaced by the new one
+try { prevCfg = loadCfg(); } catch (e) {
+  if (/newer version/.test(e.message)) { alert(e.message); return; } // never overwrite what a newer version made
+  prevCfg = null; // a damaged configuration is replaced by the new one
+}
 if (!store()) { alert('The browser blocks storage on this page, so nothing can be learned here.'); return; }
 let st = getJSON(K);
 if (st && (typeof st.steps !== 'object' || typeof st.i !== 'number')) st = null; // old format or damaged

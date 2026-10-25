@@ -399,6 +399,76 @@ test('a refresh while Play waits for Print: clicked again within a minute, it si
   expect(s.dialogs).toEqual([]); // no questions, no second Save
 });
 
+/* ---------- Record ---------- */
+
+test('Record does not record what Play types, and does not start while Play runs', async ({ browser }) => {
+  const s = await newSession(browser);
+  const page = await s.context.newPage();
+  await page.goto(MOCK + '?view=form&code=5909876543210');
+  await page.evaluate(bookmarklet('record'));
+  await saveMacro(page, FORM.slice(0, 3)); // Play fills three fields with script events while Record listens
+  await page.evaluate(bookmarklet('play'));
+  await expect(page.locator('[id="__play"]')).toContainText('Done', { timeout: 20000 });
+  await expect(page.locator('[id="__record"]')).toContainText('0 step(s)');
+
+  await saveMacro(page, FORM.slice(0, 3), { waitSec: 30 });
+  await page.evaluate(() => { document.getElementById('pt1:r2:0:it3::content').disabled = true; }); // Play has to wait
+  await page.evaluate(bookmarklet('play'));
+  await expect(page.locator('[id="__play"]')).toContainText('step 2/3');
+  s.dialogs.length = 0;
+  await page.evaluate(bookmarklet('record'));
+  expect(await waitDialog(s.dialogs, 'Play is running on this page')).toContain('wait for it to finish');
+});
+
+test('Record warns when nothing is typed as the input, so every run would do the same item', async ({ browser }) => {
+  const s = await newSession(browser);
+  const page = await s.context.newPage();
+  await page.goto(MOCK);
+  await page.evaluate(bookmarklet('record'));
+  await page.locator('[data-c="5901234123457"]').click(); // picked from the demo's code list instead of typed
+  await page.locator('[id="pt1:r1:0:cb1"]').click();
+  await page.locator('[id="__record"]').getByRole('button', { name: 'Stop and review' }).click();
+  expect(await waitDialog(s.dialogs, 'WARNING: no step types the input')).toContain('Save this recording?');
+});
+
+test('a recording finished in the new tab ends the recording in the first tab too, and both tabs share the steps', async ({ browser }) => {
+  const s = await newSession(browser);
+  const page = await s.context.newPage();
+  await page.goto(MOCK);
+  await page.evaluate(bookmarklet('record'));
+  await page.locator('[id="pt1:r1:0:it1::content"]').fill('5909876543210');
+  await page.locator('[id="pt1:r1:0:it1::content"]').blur();
+  const popupP = page.waitForEvent('popup');
+  await page.evaluate(m => window.open(m), MOCK);
+  const popup = await popupP;
+  await popup.waitForLoadState();
+  await popup.evaluate(bookmarklet('record')); // continues the same recording
+  await expect(popup.locator('[id="__record"]')).toContainText('1 step(s)');
+  await popup.locator('[id="pt1:r1:0:cb1"]').click();
+  await expect(page.locator('[id="__record"]')).toContainText('2 step(s)'); // the first tab follows
+  await popup.locator('[id="__record"]').getByRole('button', { name: 'Stop and review' }).click();
+  await popup.locator('[id="__record"]').getByText('Done!').waitFor();
+  await expect(page.locator('[id="__record"]')).toContainText('finished or cancelled in the other tab');
+  await page.locator('[id="pt1:r1:0:cb1"]').click(); // a click in the first tab is not recorded any more
+  const cfg = await page.evaluate(() => JSON.parse(localStorage.getItem('autoCfg')));
+  expect(cfg.macro.map(a => a.t)).toEqual(['set', 'click']);
+  expect(await page.evaluate(() => localStorage.getItem('autoRec'))).not.toContain('5909876543210');
+});
+
+test('Record and Learn keep a configuration made by a newer version', async ({ browser }) => {
+  const s = await newSession(browser);
+  const page = await s.context.newPage();
+  await page.goto(MOCK);
+  await page.evaluate(() => localStorage.setItem('autoCfg', JSON.stringify({ v: 9, future: true })));
+  for (const bm of ['record', 'learn']) {
+    s.dialogs.length = 0;
+    await page.evaluate(bookmarklet(bm));
+    await waitDialog(s.dialogs, 'The configuration was made by a newer version');
+  }
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('autoCfg')).future)).toBe(true);
+  await expect(page.locator('[id="__record"],[id="__learn"]')).toHaveCount(0);
+});
+
 test('Record and Learn start over when their saved state is damaged', async ({ browser }) => {
   const s = await newSession(browser);
   const page = await s.context.newPage();

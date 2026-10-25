@@ -4,7 +4,11 @@ const CLICKABLE = 'button,a,input,select,textarea,[role=button],[role=option],[r
 const win = window.opener ? 1 : 0; // 1 = this is the new tab opened by the page
 
 let prevCfg;
-try { prevCfg = loadCfg(); } catch (_) { prevCfg = null; } // a damaged configuration is replaced by the new recording
+try { prevCfg = loadCfg(); } catch (e) {
+  if (/newer version/.test(e.message)) { alert(e.message); return; } // never overwrite what a newer version made
+  prevCfg = null; // a damaged configuration is replaced by the new recording
+}
+if (window.__autopilotRun) { alert(window.__autopilotRun + ' is running on this page: wait for it to finish, then record.'); return; }
 let rec = getJSON(RK);
 if (!store()) { alert('The browser blocks storage on this page, so nothing can be recorded here.'); return; }
 if (rec && !Array.isArray(rec.actions)) rec = null; // a damaged recording in progress: start a new one
@@ -15,8 +19,16 @@ if (rec && rec.actions && rec.actions.length && !rec.done) {
   rec = null;
 }
 if (!rec || !rec.actions) rec = { actions: [], done: false };
-const A = rec.actions;
 const save = () => setJSON(RK, rec);
+// The page and the new tab it opened record into the same storage: always go on from what is stored there.
+// false when the recording was finished (or cancelled) in the other tab.
+const sync = () => {
+  const r = getJSON(RK);
+  if (!r || r.done) return false;
+  if (Array.isArray(r.actions)) rec.actions = r.actions;
+  if (r.scan) rec.scan = r.scan;
+  return true;
+};
 
 const b = makeBar('__record');
 let off = null, notice = '';
@@ -43,7 +55,7 @@ const copySource = (el, v) => {
   return null;
 };
 
-const add = a => { A.push(a); save(); draw(); };
+const add = a => { if (!sync()) return elsewhere(); rec.actions.push(a); save(); draw(); };
 
 const onClick = e => {
   if (!e.isTrusted || b.contains(e.target) || !e.target.closest) return; // real clicks only
@@ -64,7 +76,8 @@ const onClick = e => {
 
 const onChange = e => {
   const el = e.target;
-  if (!el || !el.tagName || b.contains(el)) return;
+  // while Play (or Auto) works on this page, the changes are its own, not something the user did
+  if (window.__autopilotRun || !el || !el.tagName || b.contains(el)) return;
   if (el.type === 'password') { notice = 'A password field was not recorded: type it yourself when Play stops there.'; draw(); return; }
   const tag = el.tagName.toLowerCase();
   if (tag === 'select') {
@@ -73,6 +86,8 @@ const onChange = e => {
   }
   if (!textLike(el)) return;
   const a = { t: 'set', win, loc: where(el), value: el.value };
+  if (!sync()) return elsewhere();
+  const A = rec.actions;
   if (!A.length && !win) { a.src = 'scan'; rec.scan = el.value; }
   else {
     const o = copySource(el, el.value);
@@ -82,16 +97,28 @@ const onChange = e => {
   if (last && last.t === 'set' && last.win === win && sameLoc(last.loc, a.loc)) { A[A.length - 1] = a; save(); draw(); } else add(a);
 };
 
-const quit = () => { if (off) off(); b.remove(); };
+let watcher = 0;
+const quit = () => { if (off) off(); clearInterval(watcher); b.remove(); };
+// Stopped or cancelled in the other tab: this bar must not go on recording.
+const elsewhere = () => {
+  if (off) off();
+  off = null;
+  clearInterval(watcher);
+  b.style.background = 'rgb(90,90,90)';
+  b.textContent = 'The recording was finished or cancelled in the other tab. Nothing more is recorded here.';
+  setTimeout(() => b.remove(), 6000);
+};
 
 // What the user is asked after pressing "Stop": remove steps, say what changes between runs, what to confirm.
 const review = () => {
+  if (!sync()) return elsewhere();
+  const A = rec.actions;
   if (!A.length) { alert('Nothing was recorded.'); return; }
   const list = () => A.map((a, i) => (i + 1) + '. ' + say(a)).join('\n');
   const rm = prompt('Recorded ' + A.length + ' steps:\n' + list() + '\n\nNumbers of steps to REMOVE (comma separated), or leave empty to keep all:', '');
   if (rm === null) return;
-  const drop = new Set(rm.split(',').map(x => parseInt(x, 10) - 1));
-  const steps = A.filter((_, i) => !drop.has(i));
+  const removed = new Set(rm.split(',').map(x => parseInt(x, 10) - 1));
+  const steps = A.filter((_, i) => !removed.has(i));
 
   // lists: what is chosen is fixed, the only row, your name or your organization
   let usesProfile = false;
@@ -133,7 +160,10 @@ const review = () => {
   steps.forEach((a, i) => { if (askAt.has(i)) a.confirm = true; else delete a.confirm; });
   steps.forEach(a => { if (a.src === 'scan') delete a.value; });
 
-  if (!confirm('Save this recording?\n' + steps.map((a, i) => (i + 1) + '. ' + say(a) + (a.confirm ? '   [asks "Save?"]' : '')).join('\n'))) return;
+  // Without a typed or scanned input, every run repeats exactly the same item.
+  const noInput = steps.some(a => a.src === 'scan') ? '' : 'WARNING: no step types the input (a code), so Play will do exactly the same item every '
+    + 'time. To fix it, record again and type or scan the code into the field yourself (do not pick it from a list of codes).\n\n';
+  if (!confirm(noInput + 'Save this recording?\n' + steps.map((a, i) => (i + 1) + '. ' + say(a) + (a.confirm ? '   [asks "Save?"]' : '')).join('\n'))) return;
   if (!setJSON('autoCfg', {
     v: 4,
     macro: steps,
@@ -142,22 +172,34 @@ const review = () => {
   })) { alert('The recording could not be stored: the browser storage is full or blocked.'); return; }
   rec.done = true;
   rec.actions = []; // the raw recording (typed values, row texts) does not stay behind
+  delete rec.scan;
   save();
   if (off) off();
+  clearInterval(watcher);
   b.style.background = 'rgb(46,125,50)';
   b.innerHTML = '<b>Done!</b> ' + steps.length + ' steps saved. Scan a code and use Play.';
   setTimeout(() => b.remove(), 6000);
 };
 
 const draw = () => {
-  b.innerHTML = '<b>' + String.fromCharCode(9679) + ' Recording' + (win ? ' (new tab)' : '') + ':</b> ' + A.length + ' step(s). Do the process normally; use Stop when you are done.';
+  b.innerHTML = '<b>' + String.fromCharCode(9679) + ' Recording' + (win ? ' (new tab)' : '') + ':</b> ' + rec.actions.length + ' step(s). Do the process normally; use Stop when you are done.';
   b.style.background = 'rgb(179,38,30)';
   if (notice) b.appendChild(document.createTextNode(' ' + notice));
   barButton(b, 'Stop and review', review);
-  barButton(b, 'Undo last', () => { A.pop(); save(); draw(); });
-  barButton(b, 'Cancel recording', () => { drop(RK); quit(); });
+  barButton(b, 'Undo last', () => { if (!sync()) return elsewhere(); rec.actions.pop(); save(); draw(); });
+  barButton(b, 'Cancel recording', () => {
+    if (!confirm('Throw away the whole recording (' + rec.actions.length + ' steps)?')) return;
+    drop(RK);
+    quit();
+  });
 };
 
 off = hookPicker(e => (e.type === 'click' ? onClick(e) : onChange(e)), ['click', 'change']);
 save();
 draw();
+// keep the step count in step with the other tab, and notice when it finished the recording
+let seen = rec.actions.length;
+watcher = setInterval(() => {
+  if (!sync()) return elsewhere();
+  if (rec.actions.length !== seen) { seen = rec.actions.length; draw(); }
+}, 1000);
