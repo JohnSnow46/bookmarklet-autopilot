@@ -6,7 +6,34 @@ const MODE = typeof PLAY_MODE !== 'undefined' ? PLAY_MODE : 'once';
 let cfg;
 try { cfg = embeddedOrSaved(typeof EMBED !== 'undefined' ? EMBED : undefined); } catch (e) { alert(e.message); return; }
 if (!cfg || cfg.v !== 4 || !cfg.macro) { alert('Nothing recorded yet. Use the Record bookmarklet first.'); return; }
-const M = cfg.macro, O = cfg.opts || {}, R = cfg.rules || [];
+// '' when every recorded step has the shape Play expects, otherwise what is wrong (checked before anything is done,
+// so a damaged or hand-edited recording cannot stop half-way through with a script error).
+const macroProblem = M => {
+  if (!Array.isArray(M)) return 'the recording is not a list of steps';
+  if (M.length > 500) return 'the recording has more than 500 steps';
+  const isLoc = l => !!l && typeof l === 'object' && typeof l.sel === 'string' && !!l.sel
+    && (l.frame === undefined || (Array.isArray(l.frame) && l.frame.every(f => typeof f === 'string')))
+    && (l.alt === undefined || typeof l.alt === 'string');
+  const SRC = [undefined, 'scan', 'copy', 'profile.name', 'profile.org'], MODES = ['fixed', 'only', 'profile.name', 'profile.org'];
+  for (const [i, a] of M.entries()) {
+    const bad = m => 'Step ' + (i + 1) + ': ' + m;
+    if (!a || typeof a !== 'object') return bad('not a step');
+    if (!['click', 'row', 'select', 'set'].includes(a.t)) return bad('unknown kind of step "' + a.t + '"');
+    if (a.t === 'row' ? !isLoc(a.box) || typeof a.match !== 'string' || !a.match : !isLoc(a.loc)) return bad('the element is missing');
+    if ((a.t === 'row' || a.t === 'select') && !MODES.includes(a.mode)) return bad('unknown choice "' + a.mode + '"');
+    if (a.t === 'set' && !SRC.includes(a.src)) return bad('unknown source "' + a.src + '"');
+    if (a.t === 'set' && a.src === 'copy' && !isLoc(a.from)) return bad('the field to copy from is missing');
+    if (a.t === 'set' && !a.src && typeof a.value !== 'string') return bad('the text to type is missing');
+    if (a.text !== undefined && typeof a.text !== 'string') return bad('the caption is not a text');
+  }
+  return '';
+};
+{
+  const p = macroProblem(cfg.macro);
+  if (p) { alert('The recording cannot be played, nothing was done.\n' + p + '\nRecord it again.'); return; }
+}
+if (!cfg.macro.length) { alert('The recording has no steps. Record it again.'); return; }
+const M = cfg.macro, O = cfg.opts || {}, R = Array.isArray(cfg.rules) ? cfg.rules : [];
 const SCAN = M.find(a => a.src === 'scan');
 
 // The page may reload in the middle (and this script with it): clicking Play again continues for 60 seconds.

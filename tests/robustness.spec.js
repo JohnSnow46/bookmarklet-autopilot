@@ -26,6 +26,27 @@ test('a configuration from a newer version is not run', async ({ browser }) => {
   await waitDialog(s.dialogs, 'The configuration was made by a newer version');
 });
 
+test('a malformed recording is refused before its first step is done', async ({ browser }) => {
+  const s = await newSession(browser);
+  const page = await s.context.newPage();
+  await page.goto(MOCK);
+  await page.locator('[data-c="5909876543210"]').click();
+  const search = { frame: [], sel: '[id="pt1:r1:0:cb1"]', alt: '', label: 'Search' };
+  for (const [second, why] of [
+    [{ t: 'click', win: 0, text: 'Search' }, 'Step 2: the element is missing'],
+    [{ t: 'set', win: 0, src: 'eval', loc: search }, 'Step 2: unknown source "eval"'],
+    [{ t: 'row', win: 0, box: search, match: 'li', mode: 'anyone' }, 'Step 2: unknown choice "anyone"'],
+  ]) {
+    s.dialogs.length = 0;
+    await page.evaluate(m => localStorage.setItem('autoCfg', JSON.stringify({ v: 4, macro: m, opts: {}, rules: [] })),
+      [{ t: 'click', win: 0, loc: search, text: 'Search' }, second]);
+    await page.evaluate(bookmarklet('play'));
+    expect(await waitDialog(s.dialogs, 'The recording cannot be played')).toContain(why);
+  }
+  await page.waitForTimeout(500);
+  expect(await page.locator('[id="log"]').textContent()).not.toContain('Search:'); // step 1 was never clicked
+});
+
 test('Record and Learn start over when their saved state is damaged', async ({ browser }) => {
   const s = await newSession(browser);
   const page = await s.context.newPage();
