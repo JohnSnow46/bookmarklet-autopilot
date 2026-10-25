@@ -25,6 +25,7 @@ const macroProblem = M => {
     if (a.t === 'set' && a.src === 'copy' && !isLoc(a.from)) return bad('the field to copy from is missing');
     if (a.t === 'set' && !a.src && typeof a.value !== 'string') return bad('the text to type is missing');
     if (a.text !== undefined && typeof a.text !== 'string') return bad('the caption is not a text');
+    if ((a.t === 'row' || a.t === 'select') && a.mode === 'fixed' && !a.text) return bad('the choice to make is missing');
   }
   return '';
 };
@@ -37,25 +38,33 @@ const M = cfg.macro, O = cfg.opts || {}, R = Array.isArray(cfg.rules) ? cfg.rule
 const SCAN = M.find(a => a.src === 'scan');
 const WAIT = (O.waitSec >= 1 && O.waitSec <= 600 ? O.waitSec : 30) * 1000; // how long a step waits for its element
 
+// Clicks that may change data: the ones that ask "Save?", and any click whose caption looks like saving or sending.
+const heavy = a => a.t === 'click' && (!!a.confirm || SAVE_LIKE.test(a.text || ''));
+
 // The page may reload in the middle (and this script with it): clicking Play again continues for 60 seconds.
-// The state belongs to this recording (h) and remembers the last step that asked "Save?" and was clicked (c).
+// The state belongs to this recording (h) and remembers the last data-changing step that was clicked (c).
+// A tab opened by the page gets a copy of this tab's sessionStorage, so the state also says which kind of tab wrote it.
 const PK = 'playState', UK = 'playUncertain';
 const HASH = [...JSON.stringify(M)].reduce((h, ch) => (h * 33 + ch.charCodeAt(0)) | 0, 5381);
+const OPENED = !!window.opener;
+const mine = s => !!s && s.h === HASH && !!s.o === OPENED;
 const readState = () => {
   const s = getJSON(PK, true);
-  return s && s.h === HASH && s.n === M.length && Date.now() - s.t < 60000 ? s : null;
+  return mine(s) && s.n === M.length && s.i < s.n && Date.now() - s.t < 60000 ? s : null;
 };
 let t0 = Date.now(); // start of the current run (kept across reloads for the log)
-const writeState = (i, p, c) => setJSON(PK, { i, n: M.length, t: Date.now(), p, t0, c, h: HASH }, true);
+const writeState = (i, p, c) => setJSON(PK, { i, n: M.length, t: Date.now(), p, t0, c, h: HASH, o: OPENED }, true);
 const clearState = () => drop(PK, true);
 
-// Step number of a Save that an earlier run in this tab clicked before it stopped (0 = none). Starting again from
-// step 1 would repeat it, so the user has to decide. Also covers a reload after Save that was not continued in time.
+// Step number of a data-changing click that an earlier run in this tab made before it stopped (0 = none). Starting
+// again from step 1 would repeat it, so the user has to decide. Also covers a reload after it that was not continued
+// in time. It does not expire: only the user's answer (or another recording) clears it.
 const unfinishedSave = any => {
   const u = getJSON(UK, true);
-  if (u && u.h === HASH && Date.now() - u.at < 30 * 60000) return u.step;
+  if (mine(u)) return u.step;
   const s = getJSON(PK, true);
-  return s && s.h === HASH && s.c >= 0 && (any || !readState()) ? s.c + 1 : 0;
+  if (mine(s) && s.i >= s.n) { clearState(); return 0; } // the last step went through: that run is complete
+  return mine(s) && s.c >= 0 && (any || !readState()) ? s.c + 1 : 0;
 };
 const askAfterUnfinished = any => {
   const n = unfinishedSave(any);
@@ -95,16 +104,20 @@ const run = async (st, ctl) => {
   const wins = {}; // wins[1] = the new tab opened by the page
   const oo = window.open;
   let i = st ? st.i : 0, watch = null; // watch: error texts that were already on screen before Save
-  let committed = st && st.c >= 0 ? st.c : -1, finished = false; // committed: the last clicked step that asked "Save?"
+  let committed = st && st.c >= 0 ? st.c : -1, finished = false; // committed: the last data-changing click (see heavy)
   run.stage = run.where = 'start';
   const needsProfile = M.some(a => /^profile/.test(a.src || a.mode || ''));
   const profile = needsProfile ? (st && st.p) || chooseProfile(cfg) : null;
-  window.open = function (...a) {
+  const wrap = function (...a) {
     window.open = oo;
     const w = oo.apply(window, a);
     if (!w) alert('The browser blocked the new tab. Allow pop-ups for this site.'); else wins[1] = w;
     return w;
   };
+  window.open = wrap;
+  const note = () => 'Step ' + (committed + 1) + ' (' + say(M[committed]) + ') was already clicked, so the data may already be saved. '
+    + 'Check the application before you run Play again.';
+  run.note = '';
   try {
     for (; i < M.length; i++) {
       const a = M[i];
@@ -129,22 +142,25 @@ const run = async (st, ctl) => {
         if (a.confirm) {
           const f = runRules(R, 'beforeSave', root());
           if (f.length) throw new Error('Validation failed, nothing was saved.\n' + f.join('\n'));
-          if (O.confirmSave !== false && !confirm('Save?')) return 'cancelled';
+          if (O.confirmSave !== false && !confirm('Save?')) { if (committed >= 0) run.note = note(); return 'cancelled'; }
         }
         watch = null;
         press(el);
-        if (a.confirm) committed = i;
+        if (heavy(a)) committed = i;
         writeState(i + 1, profile, committed); // the click may reload the page: continue after it
-        watch = a.confirm ? known : null; // from here on an application error stops the run
+        watch = heavy(a) ? known : null; // from here on an application error stops the run
       } else if (a.t === 'row') {
         watch = null;
+        if (/^profile/.test(a.mode) && !norm(text(a.mode, profile))) {
+          throw new Error('Your profile has no ' + (a.mode === 'profile.org' ? 'organization' : 'name') + ', so the row cannot be chosen. Add it with Show.');
+        }
         let last = -1, steady = 0, now = [];
         await wait(d => {
           now = listRows(a, d, profile);
           steady = now.length && now.length === last ? steady + 1 : 0; // wait until the list stops changing
           last = now.length;
           return steady >= 2;
-        }, 'the list row' + (a.text ? ' "' + short(a.text) + '"' : ''),
+        }, 'the list row', // without its text: this message also goes into the run log
         d => (whyNot(a.box, d) ? 'the list is ' + whyNot(a.box, d) : now.length ? 'the list kept changing' : 'no row of the list matches'));
         if (now.length > 1) {
           throw new Error('More than one row matches:\n' + now.map(([r], k) => (k + 1) + ') ' + norm(r.textContent)).join('\n')
@@ -183,16 +199,15 @@ const run = async (st, ctl) => {
     return 'ok';
   } catch (e) {
     if (committed >= 0) {
-      e.note = 'Step ' + (committed + 1) + ' (' + say(M[committed]) + ') was already clicked, so the data may already be saved. '
-        + 'Check the application before you run Play again.';
+      e.note = note();
       if (!e.cancel) e.message += '\n\n' + e.note;
     }
     throw e;
   } finally {
     clearState();
     // never start this recording again from step 1 without asking, once a Save went through and the run did not end
-    if (!finished && committed >= 0) setJSON(UK, { at: Date.now(), step: committed + 1, h: HASH }, true);
-    if (window.open !== oo && !wins[1]) window.open = oo;
+    if (!finished && committed >= 0) setJSON(UK, { at: Date.now(), step: committed + 1, h: HASH, o: OPENED }, true);
+    if (window.open === wrap) window.open = oo; // unused; a replacement made by the page itself stays
   }
 };
 
@@ -272,7 +287,7 @@ const series = async () => {
       log('stopped', e); show('Stopped.'); alert('Series stopped at ' + run.where + ':\n' + e.message); break;
     }
     log(r);
-    if (r !== 'ok') break;
+    if (r !== 'ok') { if (run.note) alert('Series was cancelled at "Save?". ' + run.note); break; }
     done++;
   }
   bar.remove();
@@ -281,6 +296,14 @@ const series = async () => {
 
 (async () => {
   if (MODE === 'dry') return dryRun(); // changes nothing: no lock needed
+  // Without a working sessionStorage (e.g. an exported Play on a page that blocks storage) a stop after Save would
+  // leave no trace, and the next run would repeat it without asking: refuse recordings that change data.
+  if (!setJSON('playProbe', 1, true) && M.some(heavy)) {
+    alert('This page does not let the bookmarklet keep track of a run (browser storage is blocked), so Play could not '
+      + 'warn you before saving twice. Allow site data for this page, or do it by hand.');
+    return;
+  }
+  drop('playProbe', true);
   if (!lockRun(MODE === 'series' ? 'Series' : 'Play')) return;
   try {
     const st = readState(); // a run that a page reload interrupted continues without asking
@@ -316,6 +339,7 @@ async function once(st) {
     const r = await run(st, { halt: () => stop, progress: i => { if (!stop) show('step ' + (i + 1) + '/' + M.length + ': ' + say(M[i])); } });
     log(r);
     finish(r === 'ok' ? 'Done, ' + M.length + ' steps.' : 'Cancelled at "Save?".', r === 'ok' ? 'rgb(46,125,50)' : 'rgb(90,90,90)');
+    if (r !== 'ok' && run.note) alert('Play was cancelled at "Save?". ' + run.note);
   } catch (e) {
     if (e.cancel) {
       log('cancelled', e);

@@ -36,6 +36,7 @@ test('a malformed recording is refused before its first step is done', async ({ 
     [{ t: 'click', win: 0, text: 'Search' }, 'Step 2: the element is missing'],
     [{ t: 'set', win: 0, src: 'eval', loc: search }, 'Step 2: unknown source "eval"'],
     [{ t: 'row', win: 0, box: search, match: 'li', mode: 'anyone' }, 'Step 2: unknown choice "anyone"'],
+    [{ t: 'row', win: 0, box: search, match: 'li', mode: 'fixed' }, 'Step 2: the choice to make is missing'],
   ]) {
     s.dialogs.length = 0;
     await page.evaluate(m => localStorage.setItem('autoCfg', JSON.stringify({ v: 4, macro: m, opts: {}, rules: [] })),
@@ -69,7 +70,7 @@ test('a fallback selector is used only while it matches exactly one element', as
   await nameTheSearchField(page, 1); // now two fields are called q: neither may be guessed
   s.dialogs.length = 0;
   await page.evaluate(bookmarklet('dryrun'));
-  expect(await waitDialog(s.dialogs, 'Dry run')).not.toContain('"Product code": OK');
+  expect(await waitDialog(s.dialogs, 'Dry run')).toContain('"Product code": not on this screen as recorded, and its fallback selector matches 2 elements');
 });
 
 const SEARCH_BTN = { frame: [], sel: '[id="pt1:r1:0:cb1"]', alt: '', label: 'Search' };
@@ -241,6 +242,108 @@ test('the run log keeps where a run stopped, but not the texts it types', async 
   const L = await page.evaluate(() => JSON.parse(localStorage.getItem('autoLog')));
   expect(L[0].step).toBe('step 2 (type a fixed text into "Line 3")');
   expect(JSON.stringify(L)).not.toContain('Robust append');
+});
+
+test('a run whose last step was a Save that reloaded the page is complete: no false "Done", no false warning', async ({ browser }) => {
+  const s = await newSession(browser);
+  const page = await s.context.newPage();
+  await page.goto(MOCK + '?variant=reload&view=form&code=5909876543210');
+  await saveMacro(page, FORM.slice(0, 4)); // ends with Save
+  await page.evaluate(bookmarklet('play'));
+  await page.waitForURL(/view=saved/);
+  await page.waitForLoadState('load');
+  s.dialogs.length = 0;
+  await page.evaluate(bookmarklet('play')); // within a minute, on the next screen
+  const msg = await waitDialog(s.dialogs, 'Play stopped', 10000); // a new run from step 1, which is not on this screen
+  expect(msg).toContain('step 1 (type a copy of "Line 1" into "Line 2")');
+  expect(s.dialogs.some(d => d.message.startsWith('The last run in this tab'))).toBe(false);
+});
+
+test('a Save-like click without the "Save?" question is still never repeated without asking', async ({ browser }) => {
+  const s = await newSession(browser, { 'The last run in this tab': false });
+  const page = await s.context.newPage();
+  await page.goto(MOCK + '?variant=saveerror&view=form&code=5909876543210');
+  const noAsk = FORM.map(a => ({ ...a, confirm: undefined })); // the user answered 0 = never ask
+  await saveMacro(page, noAsk, { waitSec: 5 });
+  await page.evaluate(bookmarklet('play'));
+  const msg = await waitDialog(s.dialogs, 'Play stopped', 20000);
+  expect(msg).toContain('The application reported an error after Save'); // the error is watched for after Save, too
+  expect(msg).toContain('Step 4 (click "Save") was already clicked');
+  s.dialogs.length = 0;
+  await page.evaluate(bookmarklet('play'));
+  await waitDialog(s.dialogs, 'The last run in this tab');
+  await page.waitForTimeout(1000);
+  expect((await page.locator('[id="log"]').textContent()).match(/Save failed/g)).toHaveLength(1);
+});
+
+test('a tab opened by the page does not take over the run state of the tab that opened it', async ({ browser }) => {
+  const s = await newSession(browser, { 'The last run in this tab': false });
+  const page = await s.context.newPage();
+  await page.goto(MOCK);
+  await saveMacro(page, TO_FORM.concat(FORM), { waitSec: 3 });
+  await page.addStyleTag({ content: '[id="pt1:r3:0:cb_gen"]{display:none}' });
+  await page.locator('[data-c="5909876543210"]').click();
+  await page.evaluate(bookmarklet('play'));
+  await waitDialog(s.dialogs, 'Play stopped', 40000); // Save went through, the run did not end
+  const popupP = page.waitForEvent('popup');
+  await page.evaluate(m => window.open(m), MOCK); // sessionStorage is copied into the new tab
+  const popup = await popupP;
+  await popup.waitForLoadState();
+  await popup.locator('[data-c="5909876543210"]').click();
+  s.dialogs.length = 0;
+  await popup.evaluate(bookmarklet('play'));
+  await expect(popup.locator('[id="__play"]')).toContainText('Done, 8 steps.', { timeout: 30000 }); // runs, no question
+  expect(s.dialogs.map(d => d.message)).toEqual(['Save?']);
+  await popup.close();
+  await page.evaluate(bookmarklet('play')); // the tab that saved still asks
+  await waitDialog(s.dialogs, 'The last run in this tab');
+});
+
+test('a list row chosen by "your organization" is not picked when the profile has none', async ({ browser }) => {
+  const s = await newSession(browser);
+  const page = await s.context.newPage();
+  await page.goto(MOCK);
+  const row = { ...TO_FORM[2], mode: 'profile.org' };
+  await saveMacro(page, [SCAN, TO_FORM[1], row]);
+  await page.evaluate(() => localStorage.setItem('autoProfiles', JSON.stringify([{ name: 'Doe Jane', org: '' }])));
+  await page.locator('[data-c="5909876543210"]').click();
+  await page.evaluate(bookmarklet('play'));
+  expect(await waitDialog(s.dialogs, 'Play stopped', 10000)).toContain('Your profile has no organization');
+  expect(await page.locator('[id="log"]').textContent()).not.toContain('Selected:');
+});
+
+test('a button caption longer than the 60 characters Record keeps is still recognised', async ({ browser }) => {
+  const s = await newSession(browser);
+  const page = await s.context.newPage();
+  await page.goto(MOCK);
+  const caption = 'Search the product catalogue and show every matching item now please';
+  await page.evaluate(c => { document.getElementById('pt1:r1:0:cb1').textContent = c; }, caption);
+  await saveMacro(page, [SCAN, { t: 'click', win: 0, loc: SEARCH_BTN, text: caption.slice(0, 60) }]);
+  await page.locator('[data-c="5909876543210"]').click();
+  await page.evaluate(bookmarklet('play'));
+  await expect(page.locator('[id="__play"]')).toContainText('Done, 2 steps.');
+});
+
+test('Play refuses a recording that saves when the page blocks storage (no way to warn about a repeat)', async ({ browser }) => {
+  const s = await newSession(browser);
+  const page = await s.context.newPage();
+  await page.goto(MOCK + '?view=form&code=5909876543210');
+  await saveMacro(page, FORM);
+  await page.evaluate(() => { Storage.prototype.setItem = () => { throw new Error('blocked'); }; });
+  await page.evaluate(bookmarklet('play'));
+  expect(await waitDialog(s.dialogs, 'This page does not let the bookmarklet keep track')).toContain('saving twice');
+  expect(await page.locator('[id="pt1:r2:0:it2::content"]').inputValue()).toBe(''); // nothing was done
+});
+
+test('the run log does not keep the text of a fixed list choice', async ({ browser }) => {
+  const s = await newSession(browser);
+  const page = await s.context.newPage();
+  await page.goto(MOCK);
+  await saveMacro(page, [{ ...TO_FORM[2], mode: 'fixed', text: 'Doe Jane - Secret Org' }]);
+  await page.evaluate(bookmarklet('play'));
+  expect(await waitDialog(s.dialogs, 'Play stopped', 10000)).toContain('Doe Jane - Secret Org'); // on screen only
+  const L = await page.evaluate(() => JSON.parse(localStorage.getItem('autoLog')));
+  expect(JSON.stringify(L)).not.toContain('Doe Jane');
 });
 
 test('Record and Learn start over when their saved state is damaged', async ({ browser }) => {

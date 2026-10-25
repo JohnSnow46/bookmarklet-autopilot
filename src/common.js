@@ -138,7 +138,8 @@ const whyNot = (c, d = document, text) => {
   if (!shown(el)) return 'found, but hidden';
   if (el.disabled) return 'found, but disabled';
   const cap = norm(el.textContent || el.value || '');
-  if (text && cap !== text) return 'found, but its caption is "' + short(cap) + '" instead of "' + text + '"';
+  // Record keeps at most 60 characters of a caption
+  if (text && cap !== text && !(text.length >= 60 && cap.slice(0, 60).trim() === text.trim())) return 'found, but its caption is "' + short(cap) + '" instead of "' + text + '"';
   return '';
 };
 // The element of a stored locator when it can be used now (visible, enabled, right caption), else null.
@@ -360,6 +361,8 @@ const chooseProfile = cfg => {
 
 /* ---------- recorded steps (Record / Play) ---------- */
 const SAVE_RE = /^(save|zapisz|zatwierd[zź]\w*|submit)$/i;
+// Captions of clicks that probably change data (wider than SAVE_RE, which only suggests where to ask "Save?").
+const SAVE_LIKE = /(^|[^a-z])(save|submit|send|delete|remove|confirm|zapisz|zatwierd|wy[sś]lij|usu[nń]|potwierd)/i;
 const modeText = m => ({ only: ' (the only row)', 'profile.name': ' (your name)', 'profile.org': ' (your organization)' }[m] || '');
 
 // A one-line description of a recorded step. plain: without typed texts or chosen list texts (for the run log).
