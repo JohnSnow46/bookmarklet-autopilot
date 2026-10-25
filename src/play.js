@@ -38,14 +38,34 @@ const SCAN = M.find(a => a.src === 'scan');
 const WAIT = (O.waitSec >= 1 && O.waitSec <= 600 ? O.waitSec : 30) * 1000; // how long a step waits for its element
 
 // The page may reload in the middle (and this script with it): clicking Play again continues for 60 seconds.
-const PK = 'playState';
+// The state belongs to this recording (h) and remembers the last step that asked "Save?" and was clicked (c).
+const PK = 'playState', UK = 'playUncertain';
+const HASH = [...JSON.stringify(M)].reduce((h, ch) => (h * 33 + ch.charCodeAt(0)) | 0, 5381);
 const readState = () => {
   const s = getJSON(PK, true);
-  return s && s.n === M.length && Date.now() - s.t < 60000 ? s : null;
+  return s && s.h === HASH && s.n === M.length && Date.now() - s.t < 60000 ? s : null;
 };
 let t0 = Date.now(); // start of the current run (kept across reloads for the log)
-const writeState = (i, p) => setJSON(PK, { i, n: M.length, t: Date.now(), p, t0 }, true);
+const writeState = (i, p, c) => setJSON(PK, { i, n: M.length, t: Date.now(), p, t0, c, h: HASH }, true);
 const clearState = () => drop(PK, true);
+
+// Step number of a Save that an earlier run in this tab clicked before it stopped (0 = none). Starting again from
+// step 1 would repeat it, so the user has to decide. Also covers a reload after Save that was not continued in time.
+const unfinishedSave = any => {
+  const u = getJSON(UK, true);
+  if (u && u.h === HASH && Date.now() - u.at < 30 * 60000) return u.step;
+  const s = getJSON(PK, true);
+  return s && s.h === HASH && s.c >= 0 && (any || !readState()) ? s.c + 1 : 0;
+};
+const askAfterUnfinished = any => {
+  const n = unfinishedSave(any);
+  if (!n) return true;
+  if (!confirm('The last run in this tab clicked step ' + n + ' (' + say(M[n - 1]) + ') and stopped before the end, so that data may already be saved.\n'
+    + 'Check the application first: a new run repeats every step from step 1.\n\nOK = start a new run anyway\nCancel = do nothing')) return false;
+  drop(UK, true);
+  clearState();
+  return true;
+};
 
 const text = (v, p) => (v === 'profile.name' ? p.name : v === 'profile.org' ? p.org : '');
 const press = el => {
@@ -75,6 +95,7 @@ const run = async (st, ctl) => {
   const wins = {}; // wins[1] = the new tab opened by the page
   const oo = window.open;
   let i = st ? st.i : 0, watch = null; // watch: error texts that were already on screen before Save
+  let committed = st && st.c >= 0 ? st.c : -1, finished = false; // committed: the last clicked step that asked "Save?"
   run.stage = 'start';
   const needsProfile = M.some(a => /^profile/.test(a.src || a.mode || ''));
   const profile = needsProfile ? (st && st.p) || chooseProfile(cfg) : null;
@@ -90,7 +111,7 @@ const run = async (st, ctl) => {
       if (ctl.halt()) throw cancelled(); // between steps; a click that was already sent is never undone
       run.stage = 'step ' + (i + 1) + ' (' + say(a) + ')';
       ctl.progress(i);
-      writeState(i, profile); // an interrupted step is retried; a click that went through is not repeated (see below)
+      writeState(i, profile, committed); // an interrupted step is retried; a click that went through is not repeated (see below)
       const root = () => (a.win ? wins[1] && wins[1].document : document);
       // Waits until fn finds what it needs; on a timeout why() says what is wrong (hidden, disabled, ambiguous...).
       const wait = (fn, what, why) => waitForOr(() => { const d = root(); return d ? fn(d) : null; },
@@ -111,7 +132,8 @@ const run = async (st, ctl) => {
         }
         watch = null;
         press(el);
-        writeState(i + 1, profile); // the click may reload the page: continue after it
+        if (a.confirm) committed = i;
+        writeState(i + 1, profile, committed); // the click may reload the page: continue after it
         watch = a.confirm ? known : null; // from here on an application error stops the run
       } else if (a.t === 'row') {
         watch = null;
@@ -128,7 +150,7 @@ const run = async (st, ctl) => {
             + '\nNothing was selected. Choose by hand, or add your organization to the profile (Show).');
         }
         press(now[0][1]);
-        writeState(i + 1, profile);
+        writeState(i + 1, profile, committed);
         await sleep(300);
       } else if (a.t === 'select') {
         const el = await element(a.loc, '"' + a.loc.label + '"');
@@ -156,9 +178,19 @@ const run = async (st, ctl) => {
         }
       }
     }
+    finished = true;
     return 'ok';
+  } catch (e) {
+    if (committed >= 0) {
+      e.note = 'Step ' + (committed + 1) + ' (' + say(M[committed]) + ') was already clicked, so the data may already be saved. '
+        + 'Check the application before you run Play again.';
+      if (!e.cancel) e.message += '\n\n' + e.note;
+    }
+    throw e;
   } finally {
     clearState();
+    // never start this recording again from step 1 without asking, once a Save went through and the run did not end
+    if (!finished && committed >= 0) setJSON(UK, { at: Date.now(), step: committed + 1, h: HASH }, true);
     if (window.open !== oo && !wins[1]) window.open = oo;
   }
 };
@@ -235,7 +267,7 @@ const series = async () => {
     try {
       r = await run(null, { halt: () => stop, progress: i => { if (!stop) show('Working on product ' + (done + 1) + ': step ' + (i + 1) + '/' + M.length + '.'); } });
     } catch (e) {
-      if (e.cancel) { log('cancelled', e); break; } // Stop pressed during a run
+      if (e.cancel) { log('cancelled', e); if (e.note) alert('Series stopped. ' + e.note); break; } // Stop pressed during a run
       log('stopped', e); show('Stopped.'); alert('Series stopped at ' + run.stage + ':\n' + e.message); break;
     }
     log(r);
@@ -247,9 +279,17 @@ const series = async () => {
 };
 
 (async () => {
-  if (MODE === 'dry') return dryRun();
-  if (MODE === 'series') return series();
-  const st = readState();
+  if (MODE === 'dry') return dryRun(); // changes nothing: no lock needed
+  if (!lockRun(MODE === 'series' ? 'Series' : 'Play')) return;
+  try {
+    const st = readState(); // a run that a page reload interrupted continues without asking
+    // Series never continues an interrupted run, so it always asks
+    if (MODE === 'series' ? !askAfterUnfinished(true) : !st && !askAfterUnfinished()) return;
+    await (MODE === 'series' ? series() : once(st));
+  } finally { unlockRun(); }
+})();
+
+async function once(st) {
   if (st && st.t0) t0 = st.t0;
   // A bar with the progress and Cancel (also Esc) while Play works; removed whatever the outcome.
   const bar = makeBar('__play');
@@ -274,11 +314,16 @@ const series = async () => {
   try {
     const r = await run(st, { halt: () => stop, progress: i => { if (!stop) show('step ' + (i + 1) + '/' + M.length + ': ' + say(M[i])); } });
     log(r);
-    finish(r === 'ok' ? 'Done, ' + M.length + ' steps.' : 'Cancelled at "Save?", nothing was saved.', r === 'ok' ? 'rgb(46,125,50)' : 'rgb(90,90,90)');
+    finish(r === 'ok' ? 'Done, ' + M.length + ' steps.' : 'Cancelled at "Save?".', r === 'ok' ? 'rgb(46,125,50)' : 'rgb(90,90,90)');
   } catch (e) {
-    if (e.cancel) { log('cancelled', e); finish('Cancelled at ' + run.stage + '.', 'rgb(90,90,90)'); return; }
+    if (e.cancel) {
+      log('cancelled', e);
+      finish('Cancelled at ' + run.stage + '.', 'rgb(90,90,90)');
+      if (e.note) alert('Play was cancelled. ' + e.note);
+      return;
+    }
     log('stopped', e);
     finish();
     alert('Play stopped at ' + run.stage + ':\n' + e.message);
   }
-})();
+}

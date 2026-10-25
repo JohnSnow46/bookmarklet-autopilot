@@ -43,6 +43,14 @@ const waitFor = async (fn, what, t = 20000) => {
   throw new Error('Element did not appear: ' + what);
 };
 
+// One run per page: a second Play, Series or Auto while one is working would click and save twice.
+const lockRun = name => {
+  if (window.__autopilotRun) { alert(window.__autopilotRun + ' is already running on this page. Wait for it to finish, or cancel it first.'); return false; }
+  window.__autopilotRun = name;
+  return true;
+};
+const unlockRun = () => { window.__autopilotRun = ''; };
+
 // The error a run stops with when the user cancels it.
 const cancelled = () => Object.assign(new Error('Cancelled by the user.'), { cancel: true });
 

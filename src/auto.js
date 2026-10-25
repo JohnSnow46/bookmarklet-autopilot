@@ -65,6 +65,7 @@ const pickFromList = async (g, text, extra, label, soft) => {
 
 (async () => {
   let stage = 'start';
+  if (!lockRun('Auto')) return;
   try {
     // The page may be reloaded between steps (and this script with it): every run continues from what it sees.
     const inSaved = () => fnd('gen') || fnd('print');
@@ -118,5 +119,5 @@ const pickFromList = async (g, text, extra, label, soft) => {
       return w;
     };
     pb.click();
-  } catch (e) { alert('Auto stopped at "' + stage + '": ' + e.message); }
+  } catch (e) { alert('Auto stopped at "' + stage + '": ' + e.message); } finally { unlockRun(); }
 })();

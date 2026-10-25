@@ -156,6 +156,80 @@ test('Play says when it is done and removes its bar', async ({ browser }) => {
   expect(s.dialogs).toEqual([]);
 });
 
+/* ---------- consequential actions: never twice ---------- */
+
+const at = (id, label) => ({ frame: [], sel: '[id="' + id + '"]', alt: '', label });
+const FORM = [
+  { t: 'set', win: 0, src: 'copy', loc: at('pt1:r2:0:it2::content', 'Line 2'), from: at('pt1:r2:0:it1::content', 'Line 1') },
+  { t: 'set', win: 0, loc: at('pt1:r2:0:it3::content', 'Line 3'), value: 'Robust append' },
+  { t: 'select', win: 0, loc: at('pt1:r2:0:soc1::content', 'User'), text: 'You (test)', mode: 'fixed' },
+  { t: 'click', win: 0, loc: at('pt1:r2:0:cb_save', 'Save'), text: 'Save', confirm: true },
+  { t: 'click', win: 0, loc: at('pt1:r3:0:cb_gen', 'Generate'), text: 'Generate' },
+];
+const TO_FORM = [SCAN, { t: 'click', win: 0, loc: SEARCH_BTN, text: 'Search' },
+  { t: 'row', win: 0, loc: at('pt1:r1:0:t1:0:cl1', 'result'), box: at('pt1:r1:0:res', 'results'), match: 'a.xResult', text: '', mode: 'only' }];
+const saves = async page => ((await page.locator('[id="log"]').textContent()).match(/Saved document/g) || []).length;
+
+test('a second Play while one is running does nothing: one "Save?", one save', async ({ browser }) => {
+  const s = await newSession(browser);
+  const page = await s.context.newPage();
+  await page.goto(MOCK);
+  await saveMacro(page, TO_FORM.concat(FORM), { waitSec: 30 });
+  await page.locator('[data-c="5909876543210"]').click();
+  await page.evaluate(bookmarklet('play'));
+  await page.evaluate(bookmarklet('play'));
+  await page.evaluate(bookmarklet('series'));
+  expect(await waitDialog(s.dialogs, 'Play is already running')).toContain('Wait for it to finish');
+  await expect(page.locator('[id="__play"]')).toContainText('Done', { timeout: 30000 });
+  expect(s.dialogs.filter(d => d.message.includes('already running'))).toHaveLength(2);
+  expect(s.dialogs.filter(d => d.message === 'Save?')).toHaveLength(1);
+  expect(await saves(page)).toBe(1);
+});
+
+test('after a Save whose result was not seen, Play does not start over without asking', async ({ browser }) => {
+  const s = await newSession(browser, { 'The last run in this tab': false });
+  const page = await s.context.newPage();
+  await page.goto(MOCK);
+  await saveMacro(page, TO_FORM.concat(FORM), { waitSec: 3 });
+  await page.addStyleTag({ content: '[id="pt1:r3:0:cb_gen"]{display:none}' }); // Save works, but its result never shows
+  await page.locator('[data-c="5909876543210"]').click();
+  await page.evaluate(bookmarklet('play'));
+  const msg = await waitDialog(s.dialogs, 'Play stopped', 40000);
+  expect(msg).toContain('Cannot use "Generate": found, but hidden');
+  expect(msg).toContain('Step 7 (click "Save") was already clicked, so the data may already be saved');
+  expect(await saves(page)).toBe(1);
+
+  await page.locator('[id="pt1:r3:0:cb_new"]').click(); // back to the search screen, the code scanned again
+  await page.locator('[data-c="5909876543210"]').click();
+  s.dialogs.length = 0;
+  await page.evaluate(bookmarklet('play'));
+  expect(await waitDialog(s.dialogs, 'The last run in this tab')).toContain('clicked step 7 (click "Save")');
+  await page.waitForTimeout(1500);
+  expect(s.dialogs.map(d => d.message.slice(0, 24))).toEqual(['The last run in this tab']); // Cancel: nothing ran
+  expect(await saves(page)).toBe(1);
+  await expect(page.locator('[id="__play"]')).toHaveCount(0);
+});
+
+test('a reload after Save that is not continued in time is not repeated from step 1 without asking', async ({ browser }) => {
+  const s = await newSession(browser, { 'The last run in this tab': false });
+  const page = await s.context.newPage();
+  await page.goto(MOCK + '?variant=reload&view=form&code=5909876543210');
+  await saveMacro(page, FORM);
+  await page.evaluate(bookmarklet('play'));
+  await page.waitForURL(/view=saved/); // Save reloaded the page, and Play with it
+  await page.waitForLoadState('load');
+  await page.evaluate(() => { // nobody clicked Play again within a minute
+    const st = JSON.parse(sessionStorage.getItem('playState'));
+    st.t -= 120000;
+    sessionStorage.setItem('playState', JSON.stringify(st));
+  });
+  s.dialogs.length = 0;
+  await page.evaluate(bookmarklet('play'));
+  expect(await waitDialog(s.dialogs, 'The last run in this tab')).toContain('clicked step 4 (click "Save")');
+  await page.waitForTimeout(1000);
+  expect(s.dialogs).toHaveLength(1);
+});
+
 test('Record and Learn start over when their saved state is damaged', async ({ browser }) => {
   const s = await newSession(browser);
   const page = await s.context.newPage();
