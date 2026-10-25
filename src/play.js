@@ -220,6 +220,8 @@ const run = async (st, ctl) => {
   } catch (e) {
     // stopped while waiting (or cancelled) after a data-changing click: step i was not done, so it can continue there
     park = committed >= 0 && (e.waited || e.cancel);
+    // typed values and choices made after that click are gone if the page is refreshed: continue where they start
+    if (park && M.slice(committed + 1, i).some(x => x.t !== 'click')) i = committed + 1;
     if (committed >= 0) {
       e.note = note() + (park ? ' Or continue at step ' + (i + 1) + ': refresh the page if it needs it, then click Play again.' : '');
       if (!e.cancel) e.message += '\n\n' + e.note;
@@ -341,7 +343,7 @@ const series = async () => {
 })();
 
 async function once(st) {
-  if (st && st.t0) t0 = st.t0;
+  if (st && st.t0 && st.t) t0 = st.t0; // not for a parked run, which may have waited for hours
   // A bar with the progress and Cancel (also Esc) while Play works; removed whatever the outcome.
   const { bar, set: show } = statusBar('__play', 'Play');
   let stop = false;

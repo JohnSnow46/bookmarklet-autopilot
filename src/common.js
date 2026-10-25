@@ -375,7 +375,7 @@ const chooseProfile = cfg => {
 /* ---------- recorded steps (Record / Play) ---------- */
 const SAVE_RE = /^(save|zapisz|zatwierd[zź]\w*|submit)$/i;
 // Captions of clicks that probably change data (wider than SAVE_RE, which only suggests where to ask "Save?").
-const SAVE_LIKE = /(^|[^a-z])(save|submit|send|delete|remove|confirm|zapisz|zatwierd|wy[sś]lij|usu[nń]|potwierd)/i;
+const SAVE_LIKE = /(^|[^a-z])(save|submit|send|delete|remove|confirm|approve|create|post(?![a-z])|add(?![a-z])|zapisz|zatwierd|wy[sś]lij|usu[nń]|potwierd|dodaj|utw[oó]rz|zaksi[eę]g|wystaw)/i;
 const modeText = m => ({ only: ' (the only row)', 'profile.name': ' (your name)', 'profile.org': ' (your organization)' }[m] || '');
 
 // A one-line description of a recorded step. plain: without typed texts or chosen list texts (for the run log).

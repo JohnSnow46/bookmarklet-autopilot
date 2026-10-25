@@ -1,31 +1,42 @@
 // Record: do the process once, normally. Every click, typed value and choice is recorded; Play repeats it.
 const RK = 'autoRec';
 const CLICKABLE = 'button,a,input,select,textarea,[role=button],[role=option],[role=menuitem],summary,li,tr,td';
-const win = window.opener ? 1 : 0; // 1 = this is the new tab opened by the page
 
 let prevCfg;
 try { prevCfg = loadCfg(); } catch (e) {
   if (/newer version/.test(e.message)) { alert(e.message); return; } // never overwrite what a newer version made
   prevCfg = null; // a damaged configuration is replaced by the new recording
 }
-if (window.__autopilotRun) { alert(window.__autopilotRun + ' is running on this page: wait for it to finish, then record.'); return; }
+// Play (or Auto) working on this page, or on the page that opened this tab (it types here, too)
+const busy = () => { try { return window.__autopilotRun || (window.opener && window.opener.__autopilotRun); } catch (e) { return ''; } };
+if (busy()) { alert(busy() + ' is running on this page: wait for it to finish, then record.'); return; }
 let rec = getJSON(RK);
 if (!store()) { alert('The browser blocks storage on this page, so nothing can be recorded here.'); return; }
 if (rec && !Array.isArray(rec.actions)) rec = null; // a damaged recording in progress: start a new one
 if (rec) rec.actions = rec.actions.filter(a => a && typeof a === 'object' && typeof a.t === 'string' && a.loc); // and drop damaged steps
-if (rec && rec.actions && rec.actions.length && !rec.done) {
+// The tab where a recording starts keeps its id (RT, per tab). A tab whose opener is that tab is the new tab the
+// routine opened (steps there are marked win 1); any other tab, e.g. a window a portal opened, starts on its own.
+const RT = 'autoRecTab';
+const openedByRecording = r => { try { return !!window.opener && JSON.parse(window.opener.sessionStorage.getItem(RT)) === r.id; } catch (e) { return false; } };
+const win = rec && !rec.done && rec.id && openedByRecording(rec) ? 1 : 0; // 1 = the new tab opened during the recording
+if (win) {
+  // it joins the recording of the tab that opened it: nothing to ask, and nothing of that tab is overwritten
+} else if (rec && rec.actions.length && !rec.done) {
   if (!confirm('Continue the recording (' + rec.actions.length + ' steps so far)? Cancel = start a new one')) rec = null;
-} else if (rec && rec.done && !win) {
+  else { const r = getJSON(RK); if (r && Array.isArray(r.actions) && !r.done) rec = r; } // steps another tab added meanwhile
+} else if (rec && rec.done) {
   if (!confirm('A recording already exists. Record again?')) return;
   rec = null;
 }
-if (!rec || !rec.actions) rec = { actions: [], done: false };
+if (!rec || !Array.isArray(rec.actions) || rec.done) rec = { actions: [], done: false };
+if (!rec.id) rec.id = String(Date.now()) + Math.random().toString(36).slice(2, 8);
+if (!win) setJSON(RT, rec.id, true);
 const save = () => setJSON(RK, rec);
 // The page and the new tab it opened record into the same storage: always go on from what is stored there.
-// false when the recording was finished (or cancelled) in the other tab.
+// false when the recording was finished (or cancelled) in the other tab, or another one was started there.
 const sync = () => {
   const r = getJSON(RK);
-  if (!r || r.done) return false;
+  if (!r || r.done || (r.id && r.id !== rec.id)) return false;
   if (Array.isArray(r.actions)) rec.actions = r.actions;
   if (r.scan) rec.scan = r.scan;
   return true;
@@ -69,7 +80,7 @@ const onClick = e => {
   if (!buttonLike(el) && row.parentElement && (row !== el || el.matches('li,[role=option],tr'))) {
     // a row of a list or a table: Play finds it again by its text, not by its position
     Object.assign(a, { t: 'row', match: optSelector(el), text: norm(row.textContent).slice(0, 120), box: describe(row.parentElement), mode: 'fixed' });
-  } else if (buttonLike(el)) {
+  } else if (buttonLike(el) || (tag === 'a' && SAVE_LIKE.test(el.textContent || ''))) { // a link can save or delete, too
     a.text = norm(el.textContent || el.value || '').slice(0, 60);
   }
   add(a);
@@ -78,7 +89,7 @@ const onClick = e => {
 const onChange = e => {
   const el = e.target;
   // while Play (or Auto) works on this page, the changes are its own, not something the user did
-  if (window.__autopilotRun || !el || !el.tagName || b.contains(el)) return;
+  if (busy() || !el || !el.tagName || b.contains(el)) return;
   if (el.type === 'password') { notice = 'A password field was not recorded: type it yourself when Play stops there.'; draw(); return; }
   const tag = el.tagName.toLowerCase();
   if (tag === 'select') {
@@ -106,7 +117,7 @@ const elsewhere = () => {
   off = null;
   clearInterval(watcher);
   b.style.background = 'rgb(90,90,90)';
-  b.textContent = 'The recording was finished or cancelled in the other tab. Nothing more is recorded here.';
+  b.textContent = 'The recording was finished, cancelled or started again in another tab. Nothing more is recorded here.';
   setTimeout(() => b.remove(), 6000);
 };
 

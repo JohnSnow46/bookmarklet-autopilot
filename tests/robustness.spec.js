@@ -506,7 +506,7 @@ test('a recording finished in the new tab ends the recording in the first tab to
   await expect(page.locator('[id="__record"]')).toContainText('2 step(s)'); // the first tab follows
   await popup.locator('[id="__record"]').getByRole('button', { name: 'Stop and review' }).click();
   await popup.locator('[id="__record"]').getByText('Done!').waitFor();
-  await expect(page.locator('[id="__record"]')).toContainText('finished or cancelled in the other tab');
+  await expect(page.locator('[id="__record"]')).toContainText('finished, cancelled or started again in another tab');
   await page.locator('[id="pt1:r1:0:cb1"]').click(); // a click in the first tab is not recorded any more
   const cfg = await page.evaluate(() => JSON.parse(localStorage.getItem('autoCfg')));
   expect(cfg.macro.map(a => a.t)).toEqual(['set', 'click']);
@@ -590,4 +590,44 @@ test('Dry run puts back the outline the page gave an element', async ({ browser 
   await page.evaluate(bookmarklet('dryrun'));
   await waitDialog(s.dialogs, 'Dry run');
   expect(await field.evaluate(el => el.style.outline)).toBe('red dotted 2px');
+});
+
+test('after a refresh, a continued run types again what the refresh cleared after the Save', async ({ browser }) => {
+  const s = await newSession(browser, { 'The last run in this tab': true });
+  const page = await s.context.newPage();
+  await page.goto(MOCK + '?view=form&code=5909876543210');
+  // Save first, then a field is filled, then a button that does not come: continuing must fill the field again
+  const macro = [FORM[3], FORM[1], FORM[4]];
+  await saveMacro(page, macro, { waitSec: 2 });
+  await page.addStyleTag({ content: '[id="pt1:r3:0:cb_gen"]{display:none}' });
+  await page.evaluate(bookmarklet('play'));
+  expect(await waitDialog(s.dialogs, 'Play stopped', 30000)).toContain('Or continue at step 2');
+});
+
+test('Record in a window opened by another page (a portal) is not taken for the new tab of a recording', async ({ browser }) => {
+  const s = await newSession(browser);
+  const portal = await s.context.newPage();
+  await portal.goto(MOCK);
+  await portal.evaluate(() => localStorage.setItem('autoRec', JSON.stringify({ actions: [], done: true })));
+  const [app] = await Promise.all([s.context.waitForEvent('page'), portal.evaluate(u => { window.open(u); }, MOCK)]);
+  await app.waitForLoadState('load');
+  await app.evaluate(bookmarklet('record'));
+  await waitDialog(s.dialogs, 'A recording already exists');
+  await app.locator('[id="pt1:r1:0:it1::content"]').fill('5909876543210');
+  await app.locator('[id="pt1:r1:0:it1::content"]').dispatchEvent('change');
+  await app.waitForTimeout(1500); // the watcher has run: the recording must still be going on
+  await expect(app.locator('[id="__record"]')).toContainText('1 step(s)');
+  const rec = await app.evaluate(() => JSON.parse(localStorage.getItem('autoRec')));
+  expect(rec.actions[0]).toMatchObject({ win: 0, src: 'scan' });
+});
+
+test('a link whose caption deletes or saves is guarded like a button', async ({ browser }) => {
+  const s = await newSession(browser);
+  const page = await s.context.newPage();
+  await page.goto(MOCK);
+  await page.evaluate(() => { const a = document.createElement('a'); a.id = 'del'; a.textContent = 'Delete'; document.body.append(a); });
+  await page.evaluate(bookmarklet('record'));
+  await page.locator('[id="del"]').click();
+  const rec = await page.evaluate(() => JSON.parse(localStorage.getItem('autoRec')));
+  expect(rec.actions[0]).toMatchObject({ t: 'click', text: 'Delete' });
 });
