@@ -10,3 +10,7 @@ export-dump-*
 capture-*
 screenshots/
 *.png.private
+
+# local Claude Code state
+.claude/*.lock
+.claude/settings.local.json
