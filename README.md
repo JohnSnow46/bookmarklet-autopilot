@@ -80,9 +80,14 @@ never undone.
 Play is careful with Save:
 
 - Only one Play, Series or Auto runs on a page at a time; a second click is refused, so nothing is saved twice in parallel.
-- If a step that asks "Save?" was clicked and the run then stopped, was cancelled, or a page reload after it was not
-  continued within a minute, the stop message says the data **may already be saved**, and the next Play or Series in
-  that tab explains this and asks before starting again from step 1. It never repeats a Save on its own.
+- If a Save-like step (one that asks "Save?", or whose caption looks like save, submit, send, delete, …) was clicked
+  and the run then stopped, was cancelled, or a page reload after it was not continued within a minute, the stop
+  message says the data **may already be saved**, and the next Play or Series in that tab explains this and asks before
+  starting again from step 1. It never repeats a Save on its own.
+- **A button that only appears after a refresh** (e.g. Print, while the printout is generated in the background): when
+  Play stops waiting for it after Save, it remembers that step. Refresh the page as often as needed, click Play, answer
+  **OK = continue at step N**, and it goes on from there without saving again. If you refresh while Play is still
+  waiting and click Play within a minute, it continues without asking.
 - A recording or configuration that is damaged, malformed or made by a newer version is refused before the first step,
   with the reason; nothing is clicked.
 
@@ -198,6 +203,7 @@ Variants are selected with `?variant=…` (comma separated):
 | `saveerror` | Save always fails with an application error |
 | `combo` | the User field is a searchable drop-down with late results; one person is in two organizations |
 | `orgcombo` | adds an Organization drop-down of the same kind |
+| `refreshprint` | after Generate, Print only appears once the page is refreshed |
 
 ## Using it on a real site
 

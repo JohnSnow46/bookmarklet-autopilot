@@ -53,8 +53,27 @@ const readState = () => {
   return mine(s) && s.n === M.length && s.i < s.n && Date.now() - s.t < 60000 ? s : null;
 };
 let t0 = Date.now(); // start of the current run (kept across reloads for the log)
-const writeState = (i, p, c) => setJSON(PK, { i, n: M.length, t: Date.now(), p, t0, c, h: HASH, o: OPENED }, true);
+const writeState = (i, p, c, t = Date.now()) => setJSON(PK, { i, n: M.length, t, p, t0, c, h: HASH, o: OPENED }, true);
 const clearState = () => drop(PK, true);
+
+// A run that stopped (or was cancelled) while waiting for an element after a data-changing click is "parked": its
+// state stays, without a time limit, so that it can continue at that step, e.g. after the page had to be refreshed
+// until a Print button appeared. Nothing that was already done is repeated. Continuing always asks first.
+const parked = () => {
+  const s = getJSON(PK, true);
+  return mine(s) && s.n === M.length && s.i < s.n && s.c >= 0 && !readState() ? s : null;
+};
+// true: continue the parked run p; false: do nothing; null: it was forgotten, start a new run.
+const askParked = p => {
+  if (confirm('The last run in this tab clicked step ' + (p.c + 1) + ' (' + say(M[p.c]) + ') and stopped before step ' + (p.i + 1)
+    + ' (' + say(M[p.i]) + ').\nIt can continue there; nothing that was already done is repeated.\n\nOK = continue at step ' + (p.i + 1)
+    + '\nCancel = do not continue')) return true;
+  if (!confirm('Forget that run and start a new one from step 1? Step ' + (p.c + 1) + ' was already clicked, so that item may '
+    + 'already be saved: check the application first.\n\nOK = forget it and start a new run\nCancel = do nothing')) return false;
+  clearState();
+  drop(UK, true);
+  return null;
+};
 
 // Step number of a data-changing click that an earlier run in this tab made before it stopped (0 = none). Starting
 // again from step 1 would repeat it, so the user has to decide. Also covers a reload after it that was not continued
@@ -118,6 +137,7 @@ const run = async (st, ctl) => {
   const note = () => 'Step ' + (committed + 1) + ' (' + say(M[committed]) + ') was already clicked, so the data may already be saved. '
     + 'Check the application before you run Play again.';
   run.note = '';
+  let park = false;
   try {
     for (; i < M.length; i++) {
       const a = M[i];
@@ -132,7 +152,7 @@ const run = async (st, ctl) => {
         () => (watch ? errorTexts().find(x => !watch.includes(x)) : null), what, WAIT, ctl.halt).catch(e => {
         if (!e.timeout) throw e;
         const d = root();
-        throw new Error('Cannot use ' + what + ': ' + (d ? why(d) : 'the new tab is not open') + ' (waited ' + WAIT / 1000 + ' s).');
+        throw Object.assign(new Error('Cannot use ' + what + ': ' + (d ? why(d) : 'the new tab is not open') + ' (waited ' + WAIT / 1000 + ' s).'), { waited: true });
       });
       const element = (c, what, text) => wait(d => usable(c, d, text), what, d => whyNot(c, d, text) || 'it kept changing');
       const known = errorTexts();
@@ -198,15 +218,19 @@ const run = async (st, ctl) => {
     finished = true;
     return 'ok';
   } catch (e) {
+    // stopped while waiting (or cancelled) after a data-changing click: step i was not done, so it can continue there
+    park = committed >= 0 && (e.waited || e.cancel);
     if (committed >= 0) {
-      e.note = note();
+      e.note = note() + (park ? ' Or continue at step ' + (i + 1) + ': refresh the page if it needs it, then click Play again.' : '');
       if (!e.cancel) e.message += '\n\n' + e.note;
     }
     throw e;
   } finally {
-    clearState();
+    if (park) writeState(i, profile, committed, 0); // time 0: continuing it always asks first
+    else clearState();
     // never start this recording again from step 1 without asking, once a Save went through and the run did not end
-    if (!finished && committed >= 0) setJSON(UK, { at: Date.now(), step: committed + 1, h: HASH, o: OPENED }, true);
+    if (finished) drop(UK, true);
+    else if (committed >= 0) setJSON(UK, { at: Date.now(), step: committed + 1, h: HASH, o: OPENED }, true);
     if (window.open === wrap) window.open = oo; // unused; a replacement made by the page itself stays
   }
 };
@@ -306,7 +330,12 @@ const series = async () => {
   drop('playProbe', true);
   if (!lockRun(MODE === 'series' ? 'Series' : 'Play')) return;
   try {
-    const st = readState(); // a run that a page reload interrupted continues without asking
+    let st = readState(); // a run that a page reload interrupted continues without asking
+    if (MODE !== 'series' && !st && parked()) {
+      const go = askParked(parked());
+      if (go === false) return;
+      if (go) st = parked();
+    }
     // Series never continues an interrupted run, so it always asks
     if (MODE === 'series' ? !askAfterUnfinished(true) : !st && !askAfterUnfinished()) return;
     await (MODE === 'series' ? series() : once(st));

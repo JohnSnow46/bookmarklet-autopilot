@@ -133,6 +133,10 @@ Play stops and says at which step and why. Nothing is saved on a guess. If it st
 message says so: check in the application whether the item was saved. The next Play in that tab asks before starting
 again, so the same item is not saved twice by accident.
 
+If a button only appears after you refresh the page (for example Print, while the printout is being made), Play stops
+waiting for it. Refresh until the button is there, click **Play**, and answer **OK** to "continue at step …". It goes
+on from that step and does not save again.
+
 ## 7. Many items: Series
 
 Click **Series** once. A blue bar waits for a code; enter one and the whole routine runs, then it waits for the next

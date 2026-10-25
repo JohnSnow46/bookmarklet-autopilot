@@ -73,6 +73,8 @@ Second review, 2026-10-25 (reliability and data safety):
 | 24 | The run log stored the step text including fixed typed texts and fixed list choices. | Low (data minimisation) | **Fixed**: the log describes steps without values; the on-screen message still shows them. Test. |
 | 25 | The resume state matched a recording only by its number of steps. | Low | **Fixed**: the state carries a hash of the recording. |
 | 26 | The build guard did not cover workers, `postMessage`, navigation or elements that load URLs; `dist/` could be stale against `src/` while tests passed. | Low (supply chain) | **Fixed**: wider guard, `pretest` rebuild and a test that compares `dist/` with a fresh build. |
+| 28 | Review by the `code-reviewer` agent and exploratory testing by the Playwright planner agent found: a false "Done" after a reload-causing last step; row texts back in the log; the Save warning expiring after 30 min; Save-like clicks without "Save?" unguarded; no guard with blocked storage; the print tab inheriting the run state; an empty organization matching any row. | Medium | **Fixed**, each with a regression test. |
+| 29 | A step that waits for a button which only appears after a page refresh could not be continued after Play gave up: the only way on was a restart from step 1. | Medium (duplicate data, usability) | **Fixed**: a run that stops while waiting after a Save-like click is parked in `playState` (sessionStorage) and continues at that step after a confirmation; it never repeats what was done. |
 | 27 | Exported bookmarklets made before this review keep their old built-in Play code. | Info | Accepted: the configuration format is unchanged (v4), so re-exporting gives the new behaviour. |
 
 ## Owner's tasks for the installer

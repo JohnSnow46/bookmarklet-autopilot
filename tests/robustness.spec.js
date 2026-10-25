@@ -188,7 +188,7 @@ test('a second Play while one is running does nothing: one "Save?", one save', a
 });
 
 test('after a Save whose result was not seen, Play does not start over without asking', async ({ browser }) => {
-  const s = await newSession(browser, { 'The last run in this tab': false });
+  const s = await newSession(browser, { 'The last run in this tab': false, 'Forget that run': false });
   const page = await s.context.newPage();
   await page.goto(MOCK);
   await saveMacro(page, TO_FORM.concat(FORM), { waitSec: 3 });
@@ -198,6 +198,7 @@ test('after a Save whose result was not seen, Play does not start over without a
   const msg = await waitDialog(s.dialogs, 'Play stopped', 40000);
   expect(msg).toContain('Cannot use "Generate": found, but hidden');
   expect(msg).toContain('Step 7 (click "Save") was already clicked, so the data may already be saved');
+  expect(msg).toContain('Or continue at step 8: refresh the page if it needs it');
   expect(await saves(page)).toBe(1);
 
   await page.locator('[id="pt1:r3:0:cb_new"]').click(); // back to the search screen, the code scanned again
@@ -206,13 +207,13 @@ test('after a Save whose result was not seen, Play does not start over without a
   await page.evaluate(bookmarklet('play'));
   expect(await waitDialog(s.dialogs, 'The last run in this tab')).toContain('clicked step 7 (click "Save")');
   await page.waitForTimeout(1500);
-  expect(s.dialogs.map(d => d.message.slice(0, 24))).toEqual(['The last run in this tab']); // Cancel: nothing ran
+  expect(s.dialogs.map(d => d.message.slice(0, 24))).toEqual(['The last run in this tab', 'Forget that run and star']); // Cancel twice: nothing ran
   expect(await saves(page)).toBe(1);
   await expect(page.locator('[id="__play"]')).toHaveCount(0);
 });
 
 test('a reload after Save that is not continued in time is not repeated from step 1 without asking', async ({ browser }) => {
-  const s = await newSession(browser, { 'The last run in this tab': false });
+  const s = await newSession(browser, { 'The last run in this tab': false, 'Forget that run': false });
   const page = await s.context.newPage();
   await page.goto(MOCK + '?variant=reload&view=form&code=5909876543210');
   await saveMacro(page, FORM);
@@ -226,9 +227,9 @@ test('a reload after Save that is not continued in time is not repeated from ste
   });
   s.dialogs.length = 0;
   await page.evaluate(bookmarklet('play'));
-  expect(await waitDialog(s.dialogs, 'The last run in this tab')).toContain('clicked step 4 (click "Save")');
+  expect(await waitDialog(s.dialogs, 'The last run in this tab')).toContain('clicked step 4 (click "Save") and stopped before step 5 (click "Generate")');
   await page.waitForTimeout(1000);
-  expect(s.dialogs).toHaveLength(1);
+  expect(s.dialogs.map(d => d.message.slice(0, 15))).toEqual(['The last run in', 'Forget that run']); // neither continued nor restarted
 });
 
 test('the run log keeps where a run stopped, but not the texts it types', async ({ browser }) => {
@@ -260,7 +261,7 @@ test('a run whose last step was a Save that reloaded the page is complete: no fa
 });
 
 test('a Save-like click without the "Save?" question is still never repeated without asking', async ({ browser }) => {
-  const s = await newSession(browser, { 'The last run in this tab': false });
+  const s = await newSession(browser, { 'The last run in this tab': false, 'Forget that run': false });
   const page = await s.context.newPage();
   await page.goto(MOCK + '?variant=saveerror&view=form&code=5909876543210');
   const noAsk = FORM.map(a => ({ ...a, confirm: undefined })); // the user answered 0 = never ask
@@ -344,6 +345,58 @@ test('the run log does not keep the text of a fixed list choice', async ({ brows
   expect(await waitDialog(s.dialogs, 'Play stopped', 10000)).toContain('Doe Jane - Secret Org'); // on screen only
   const L = await page.evaluate(() => JSON.parse(localStorage.getItem('autoLog')));
   expect(JSON.stringify(L)).not.toContain('Doe Jane');
+});
+
+/* ---------- a button that only appears after the page is refreshed ---------- */
+
+const PRINT_TAIL = [
+  { t: 'click', win: 0, loc: at('pt1:r3:0:cb_gen', 'Print'), text: 'Print' },
+  { t: 'click', win: 1, loc: at('pt1:p1:cb_apply', 'Apply'), text: 'Apply' },
+];
+const printed = popup => expect(popup.locator('[id="log"]')).toContainText('Apply → printing', { timeout: 30000 });
+
+test('Print appears only after a refresh: Play stops, and after the refresh it continues at Print without saving again', async ({ browser }) => {
+  const s = await newSession(browser);
+  const page = await s.context.newPage();
+  await page.goto(MOCK + '?variant=refreshprint');
+  await saveMacro(page, TO_FORM.concat(FORM, PRINT_TAIL), { waitSec: 3 });
+  await page.locator('[data-c="5909876543210"]').click();
+  await page.evaluate(bookmarklet('play'));
+  const msg = await waitDialog(s.dialogs, 'Play stopped', 40000);
+  expect(msg).toContain('step 9 (click "Print")');
+  expect(msg).toContain('Or continue at step 9');
+  expect(await saves(page)).toBe(1);
+
+  await page.reload(); // the user refreshes until Print is there
+  await expect(page.locator('[id="pt1:r3:0:cb_gen"]')).toHaveText('Print');
+  s.dialogs.length = 0;
+  const popupP = page.waitForEvent('popup');
+  await page.evaluate(bookmarklet('play'));
+  expect(await waitDialog(s.dialogs, 'The last run in this tab')).toContain('OK = continue at step 9');
+  await printed(await popupP);
+  expect(s.dialogs.filter(d => d.message === 'Save?')).toHaveLength(0); // Save was not repeated
+
+  s.dialogs.length = 0; // the run is complete now: the next Play does not ask about it
+  await page.evaluate(bookmarklet('play'));
+  await waitDialog(s.dialogs, 'Play stopped', 10000); // a new run, step 1 is not on this screen
+  expect(s.dialogs.some(d => d.message.startsWith('The last run'))).toBe(false);
+});
+
+test('a refresh while Play waits for Print: clicked again within a minute, it simply continues', async ({ browser }) => {
+  const s = await newSession(browser);
+  const page = await s.context.newPage();
+  await page.goto(MOCK + '?variant=refreshprint');
+  await saveMacro(page, TO_FORM.concat(FORM, PRINT_TAIL), { waitSec: 60 });
+  await page.locator('[data-c="5909876543210"]').click();
+  await page.evaluate(bookmarklet('play'));
+  await expect(page.locator('[id="__play"]')).toContainText('step 9/10', { timeout: 30000 });
+  await page.waitForTimeout(1600); // the printout is ready in the background
+  await page.reload();
+  s.dialogs.length = 0;
+  const popupP = page.waitForEvent('popup');
+  await page.evaluate(bookmarklet('play'));
+  await printed(await popupP);
+  expect(s.dialogs).toEqual([]); // no questions, no second Save
 });
 
 test('Record and Learn start over when their saved state is damaged', async ({ browser }) => {
