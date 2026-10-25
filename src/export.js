@@ -11,7 +11,7 @@ const mine = getProfiles(cfg);
 out.opts.profiles = mine;
 if (mine.length && !confirm('Include your profile(s)?\n' + mine.map(profileText).join('\n') + '\n\nOK = include\nCancel = leave out, whoever runs it will be asked for their own on the first run')) out.opts.profiles = [];
 // Show what is about to leave this computer: fixed texts typed or chosen in the recording, and the append text.
-const fixed = (out.macro || []).filter(a => (a.t === 'set' && !a.src) || (a.t !== 'click' && a.mode === 'fixed' && a.text)).map(say);
+const fixed = (out.macro || []).filter(a => (a.t === 'set' && !a.src) || (a.t !== 'click' && a.mode === 'fixed' && a.text)).map(a => say(a));
 if (out.opts.extraLine) fixed.push('append text "' + short(out.opts.extraLine) + '"');
 if (fixed.length && !confirm('The exported code will contain these fixed texts (readable by anyone who has the code):\n' + fixed.join('\n') + '\n\nNothing else from the page is included. Continue?')) return;
 const code = 'javascript:(()=>{const EMBED=' + JSON.stringify(enc(JSON.stringify(out))) + ';' + (cfg.v === 4 ? PLAY : AUTO) + '})();';

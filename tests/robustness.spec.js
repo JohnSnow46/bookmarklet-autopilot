@@ -230,6 +230,19 @@ test('a reload after Save that is not continued in time is not repeated from ste
   expect(s.dialogs).toHaveLength(1);
 });
 
+test('the run log keeps where a run stopped, but not the texts it types', async ({ browser }) => {
+  const s = await newSession(browser);
+  const page = await s.context.newPage();
+  await page.goto(MOCK + '?view=form&code=5909876543210');
+  await saveMacro(page, FORM);
+  await page.evaluate(() => { document.getElementById('pt1:r2:0:it3::content').disabled = true; });
+  await page.evaluate(bookmarklet('play'));
+  expect(await waitDialog(s.dialogs, 'Play stopped', 10000)).toContain('step 2 (type "Robust append" into "Line 3")'); // on screen: all of it
+  const L = await page.evaluate(() => JSON.parse(localStorage.getItem('autoLog')));
+  expect(L[0].step).toBe('step 2 (type a fixed text into "Line 3")');
+  expect(JSON.stringify(L)).not.toContain('Robust append');
+});
+
 test('Record and Learn start over when their saved state is damaged', async ({ browser }) => {
   const s = await newSession(browser);
   const page = await s.context.newPage();

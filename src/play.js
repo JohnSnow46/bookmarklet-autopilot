@@ -96,7 +96,7 @@ const run = async (st, ctl) => {
   const oo = window.open;
   let i = st ? st.i : 0, watch = null; // watch: error texts that were already on screen before Save
   let committed = st && st.c >= 0 ? st.c : -1, finished = false; // committed: the last clicked step that asked "Save?"
-  run.stage = 'start';
+  run.stage = run.where = 'start';
   const needsProfile = M.some(a => /^profile/.test(a.src || a.mode || ''));
   const profile = needsProfile ? (st && st.p) || chooseProfile(cfg) : null;
   window.open = function (...a) {
@@ -109,7 +109,8 @@ const run = async (st, ctl) => {
     for (; i < M.length; i++) {
       const a = M[i];
       if (ctl.halt()) throw cancelled(); // between steps; a click that was already sent is never undone
-      run.stage = 'step ' + (i + 1) + ' (' + say(a) + ')';
+      run.stage = 'step ' + (i + 1) + ' (' + say(a, true) + ')'; // for the log: no typed or chosen texts
+      run.where = 'step ' + (i + 1) + ' (' + say(a) + ')'; // for the message on screen
       ctl.progress(i);
       writeState(i, profile, committed); // an interrupted step is retried; a click that went through is not repeated (see below)
       const root = () => (a.win ? wins[1] && wins[1].document : document);
@@ -268,7 +269,7 @@ const series = async () => {
       r = await run(null, { halt: () => stop, progress: i => { if (!stop) show('Working on product ' + (done + 1) + ': step ' + (i + 1) + '/' + M.length + '.'); } });
     } catch (e) {
       if (e.cancel) { log('cancelled', e); if (e.note) alert('Series stopped. ' + e.note); break; } // Stop pressed during a run
-      log('stopped', e); show('Stopped.'); alert('Series stopped at ' + run.stage + ':\n' + e.message); break;
+      log('stopped', e); show('Stopped.'); alert('Series stopped at ' + run.where + ':\n' + e.message); break;
     }
     log(r);
     if (r !== 'ok') break;
@@ -324,6 +325,6 @@ async function once(st) {
     }
     log('stopped', e);
     finish();
-    alert('Play stopped at ' + run.stage + ':\n' + e.message);
+    alert('Play stopped at ' + run.where + ':\n' + e.message);
   }
 }

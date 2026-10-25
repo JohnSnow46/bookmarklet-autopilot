@@ -362,13 +362,14 @@ const chooseProfile = cfg => {
 const SAVE_RE = /^(save|zapisz|zatwierd[zź]\w*|submit)$/i;
 const modeText = m => ({ only: ' (the only row)', 'profile.name': ' (your name)', 'profile.org': ' (your organization)' }[m] || '');
 
-// A one-line description of a recorded step.
-const say = a => {
-  const l = a.loc ? a.loc.label : '', w = a.win ? ' [new tab]' : '';
-  if (a.t === 'click') return 'click ' + (a.text ? '"' + a.text + '"' : '[' + l + ']') + w;
-  if (a.t === 'row') return 'choose the list row' + (a.text ? ' "' + short(a.text) + '"' : '') + modeText(a.mode) + w;
-  if (a.t === 'select') return 'choose' + (a.text ? ' "' + a.text + '"' : '') + ' in "' + l + '"' + modeText(a.mode) + w;
+// A one-line description of a recorded step. plain: without typed texts or chosen list texts (for the run log).
+const say = (a, plain) => {
+  const l = a.loc ? a.loc.label : '', w = a.win ? ' [new tab]' : '', t = plain ? '' : a.text;
+  if (a.t === 'click') return 'click ' + (a.text ? '"' + a.text + '"' : '[' + l + ']') + w; // button captions are not data
+  if (a.t === 'row') return 'choose the list row' + (t ? ' "' + short(t) + '"' : '') + modeText(a.mode) + w;
+  if (a.t === 'select') return 'choose' + (t ? ' "' + t + '"' : '') + ' in "' + l + '"' + modeText(a.mode) + w;
   const what = a.src === 'scan' ? 'the scanned code' : a.src === 'copy' ? 'a copy of "' + a.from.label + '"'
-    : a.src === 'profile.name' ? 'your name' : a.src === 'profile.org' ? 'your organization' : '"' + short(a.value || '') + '"';
+    : a.src === 'profile.name' ? 'your name' : a.src === 'profile.org' ? 'your organization'
+    : plain ? 'a fixed text' : '"' + short(a.value || '') + '"';
   return 'type ' + what + ' into "' + l + '"' + w;
 };
