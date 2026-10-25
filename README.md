@@ -7,13 +7,16 @@
 1. Open <https://johnsnow46.github.io/bookmarklet-autopilot/>
 2. Turn on the bookmarks bar: press **Ctrl+Shift+B**.
 3. Drag the **Record**, **Play** and **Dry run** buttons onto the bookmarks bar.
+4. Check it works: if your application opens new tabs (e.g. for printing), allow **pop-ups** for its address in the browser.
 
 **Once: record what you do**
 
 1. Open your application, on the screen where your work starts.
 2. Click **Record** in the bookmarks bar. A red bar appears at the top.
-3. Do your work **once**, normally, until the end.
-4. Click **Stop and review** on the red bar.
+3. Do your work **once**, normally, until the end. **Type or scan** the code yourself (do not pick it from a list of codes): that is how Play knows what changes every time.
+   - Does your work open a **new tab** (e.g. a print preview)? Click **Record** again in that new tab and carry on there.
+   - Did the page **reload completely**? Click **Record** again and press **OK** to continue the recording.
+4. Click **Stop and review** on the red bar, in the **last** tab you worked in.
 5. Questions appear. If you are not sure, just press **OK** each time.
 6. A green bar says **Done!**. The recording is saved.
 
@@ -22,12 +25,18 @@
 1. Type or scan the next code.
 2. Click **Play**.
 3. When it asks **Save?**, look at the form. Correct? Press **OK**. Something wrong? Press **Cancel**.
-4. Done. Next code, **Play** again.
+4. Done. Go back to the **first tab**, enter the next code, **Play** again.
+
+**Need the button that only appears after a refresh?** (e.g. **Print** after a document is generated)
+
+Play waits, then stops and says **"continue at step N"**. Refresh the page (F5) and click **Play** again: it carries on at that step and does **not** save again.
 
 **If something goes wrong**
 
 - Play stops and shows a message saying **which step** and **why**. Do that step by hand, or record again.
-- Want to stop it? Press **Esc** or **Cancel** on the blue bar.
+- Want to stop it? Press **Esc** or **Cancel** on the blue bar (in Series: **Stop**).
+- You pressed **Cancel** at **Save?**: nothing was saved by that step. Fix the form by hand, or start again with the code.
+- Nothing happens at all when you click a bookmark? Your browser may block it on that page: try the demo first, from the address above.
 - The message says Save **"was already clicked"**? Check in the application whether it was saved **before** you click Play again.
 - Not sure whether it will work on this screen? Click **Dry run**. It only checks, it clicks nothing.
 
