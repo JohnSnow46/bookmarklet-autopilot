@@ -70,7 +70,7 @@ const begin = type => {
 };
 
 const chooseWhen = r => {
-  b.innerHTML = '<b>When should Auto check it?</b>';
+  b.innerHTML = '<b>When should Play and Auto check it?</b>';
   Object.entries(WHEN).forEach(([k, label]) => barButton(b, label, () => {
     r.when = k;
     cfg.rules.push(r);

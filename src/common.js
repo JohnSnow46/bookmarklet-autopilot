@@ -264,7 +264,7 @@ const statusBar = (id, title) => {
 };
 
 /* ---------- validation rules ---------- */
-const WHEN = { beforeSave: 'before Save', beforeGenerate: 'before Generate', manual: 'manual only' };
+const WHEN = { beforeSave: 'before Save', beforeGenerate: 'before Generate (Play: the first click after Save)', manual: 'manual only' };
 const RULE_TYPES = {
   equal: { label: 'A equals B', two: true },
   notEqual: { label: 'A differs from B', two: true },

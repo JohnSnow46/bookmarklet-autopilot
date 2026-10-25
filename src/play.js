@@ -40,6 +40,20 @@ const WAIT = (O.waitSec >= 1 && O.waitSec <= 600 ? O.waitSec : 30) * 1000; // ho
 
 // Clicks that may change data: the ones that ask "Save?", and any click whose caption looks like saving or sending.
 const heavy = a => a.t === 'click' && (!!a.confirm || SAVE_LIKE.test(a.text || ''));
+// Rules "before Save" are checked before every such click, rules "before Generate" before the first click after one.
+// A rule that no step would ever reach is refused here: it must never be skipped without a word.
+{
+  const has = w => R.some(r => r && r.when === w);
+  const saveAt = M.findIndex(heavy);
+  const unchecked = has('beforeSave') && saveAt < 0 ? 'before Save'
+    : has('beforeGenerate') && !M.some((a, i) => a.t === 'click' && i > saveAt && saveAt >= 0) ? 'before Generate' : '';
+  if (unchecked) {
+    alert('The recording has validation rules to check ' + unchecked + ', but Play cannot tell which step '
+      + (unchecked === 'before Save' ? 'saves' : 'comes after Save') + ', so they would never be checked. Nothing was done.\n'
+      + 'Record again and give the Save step at "Ask Save? before which steps?", or remove those rules with Validate.');
+    return;
+  }
+}
 
 // The page may reload in the middle (and this script with it): clicking Play again continues for 60 seconds.
 // The state belongs to this recording (h) and remembers the last data-changing step that was clicked (c).
@@ -65,6 +79,16 @@ const parked = () => {
 };
 // true: continue the parked run p; false: do nothing; null: it was forgotten, start a new run.
 const askParked = p => {
+  const a = M[p.i], target = a.t === 'row' ? a.box : a.loc, code = SCAN && locate(SCAN.loc);
+  if (!a.win && !usable(target, document, a.t === 'click' ? a.text : undefined) && code && code.value && code.value.trim()) {
+    if (confirm('A new code is ready, and the last run in this tab stopped before step ' + (p.i + 1) + ' (' + say(a) + '), which is not on this screen.\n'
+      + 'Start a new run with it from step 1? Step ' + (p.c + 1) + ' (' + say(M[p.c]) + ') of the last run was already clicked: '
+      + 'check that item in the application.\n\nOK = start a new run\nCancel = other choices')) {
+      clearState();
+      drop(UK, true);
+      return null;
+    }
+  }
   if (confirm('The last run in this tab clicked step ' + (p.c + 1) + ' (' + say(M[p.c]) + ') and stopped before step ' + (p.i + 1)
     + ' (' + say(M[p.i]) + ').\nIt can continue there; nothing that was already done is repeated.\n\nOK = continue at step ' + (p.i + 1)
     + '\nCancel = do not continue')) return true;
@@ -125,6 +149,9 @@ const run = async (st, ctl) => {
   let i = st ? st.i : 0, watch = null; // watch: error texts that were already on screen before Save
   let committed = st && st.c >= 0 ? st.c : -1, finished = false; // committed: the last data-changing click (see heavy)
   run.stage = run.where = 'start';
+  const opener = k => { while (k > 0 && M[k - 1].win) k--; return k - 1; }; // the click that opened the new tab of step k
+  if (M[i] && M[i].win && opener(i) > committed) i = opener(i);
+  let afterSave = committed >= 0 && !M.slice(committed + 1, i).some(x => x.t === 'click'); // rules before Generate are due
   const needsProfile = M.some(a => /^profile/.test(a.src || a.mode || ''));
   const profile = needsProfile ? (st && st.p) || chooseProfile(cfg) : null;
   const wrap = function (...a) {
@@ -159,14 +186,19 @@ const run = async (st, ctl) => {
 
       if (a.t === 'click') {
         const el = await element(a.loc, a.text ? '"' + a.text + '"' : '[' + a.loc.label + ']', a.text);
-        if (a.confirm) {
+        if (afterSave && !heavy(a)) {
+          const f = runRules(R, 'beforeGenerate', root());
+          if (f.length) throw new Error('Validation failed before the next step after Save.\n' + f.join('\n'));
+          afterSave = false;
+        }
+        if (heavy(a)) {
           const f = runRules(R, 'beforeSave', root());
           if (f.length) throw new Error('Validation failed, nothing was saved.\n' + f.join('\n'));
-          if (O.confirmSave !== false && !confirm('Save?')) { if (committed >= 0) run.note = note(); return 'cancelled'; }
         }
+        if (a.confirm && O.confirmSave !== false && !confirm('Save?')) { if (committed >= 0) run.note = note(); return 'cancelled'; }
         watch = null;
         press(el);
-        if (heavy(a)) committed = i;
+        if (heavy(a)) { committed = i; afterSave = true; }
         writeState(i + 1, profile, committed); // the click may reload the page: continue after it
         watch = heavy(a) ? known : null; // from here on an application error stops the run
       } else if (a.t === 'row') {
@@ -219,9 +251,14 @@ const run = async (st, ctl) => {
     return 'ok';
   } catch (e) {
     // stopped while waiting (or cancelled) after a data-changing click: step i was not done, so it can continue there
+    if (e.waited && SCAN && M[i - 1] === SCAN) {
+      e.message += '\nIf the code has to be confirmed with Enter (a scanner does that by itself), press Enter after typing it.';
+    }
     park = committed >= 0 && (e.waited || e.cancel);
     // typed values and choices made after that click are gone if the page is refreshed: continue where they start
     if (park && M.slice(committed + 1, i).some(x => x.t !== 'click')) i = committed + 1;
+    // the new tab is gone after a stop: continue at the click that opens it again, unless that click saved
+    if (park && M[i].win) { if (opener(i) > committed) i = opener(i); else park = false; }
     if (committed >= 0) {
       e.note = note() + (park ? ' Or continue at step ' + (i + 1) + ': refresh the page if it needs it, then click Play again.' : '');
       if (!e.cancel) e.message += '\n\n' + e.note;
@@ -267,6 +304,7 @@ const dryRun = async () => {
         el.style.outline = was;
       }
       if (ok && a.src === 'copy' && !locate(a.from)) res += ', but the field to copy from is missing';
+      if (ok && a.src === 'scan' && !String(el.value || '').trim()) res += ', but it is empty: scan a code first';
     }
     lines.push((i + 1) + '. ' + say(a) + ': ' + res);
   }
@@ -286,7 +324,7 @@ const series = async () => {
   barButton(bar, 'Stop (Esc)', halt);
   const offEsc = onEsc(halt);
   for (;;) {
-    show('Scan the next code.');
+    show('Scan the next code. (Go back to the screen with the code field first, e.g. New scan.)');
     // A code counts once the scanner has finished typing it (unchanged for ~0.6 s). After a run the field must
     // first disappear or be empty, so the same code scanned again (two identical items) is a new product.
     let code = '', same = 0, armed = done === 0;

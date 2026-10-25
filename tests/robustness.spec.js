@@ -246,7 +246,7 @@ test('a second Play while one is running does nothing: one "Save?", one save', a
 });
 
 test('after a Save whose result was not seen, Play does not start over without asking', async ({ browser }) => {
-  const s = await newSession(browser, { 'The last run in this tab': false, 'Forget that run': false });
+  const s = await newSession(browser, { 'A new code is ready': false, 'The last run in this tab': false, 'Forget that run': false });
   const page = await s.context.newPage();
   await page.goto(MOCK);
   await saveMacro(page, TO_FORM.concat(FORM), { waitSec: 3 });
@@ -265,7 +265,8 @@ test('after a Save whose result was not seen, Play does not start over without a
   await page.evaluate(bookmarklet('play'));
   expect(await waitDialog(s.dialogs, 'The last run in this tab')).toContain('clicked step 7 (click "Save")');
   await page.waitForTimeout(1500);
-  expect(s.dialogs.map(d => d.message.slice(0, 24))).toEqual(['The last run in this tab', 'Forget that run and star']); // Cancel twice: nothing ran
+  // a new code is on screen, so a new run is offered first; Cancel three times: nothing ran
+  expect(s.dialogs.map(d => d.message.slice(0, 24))).toEqual(['A new code is ready, and', 'The last run in this tab', 'Forget that run and star']);
   expect(await saves(page)).toBe(1);
   await expect(page.locator('[id="__play"]')).toHaveCount(0);
 });
@@ -593,7 +594,7 @@ test('Dry run puts back the outline the page gave an element', async ({ browser 
 });
 
 test('after a refresh, a continued run types again what the refresh cleared after the Save', async ({ browser }) => {
-  const s = await newSession(browser, { 'The last run in this tab': true });
+  const s = await newSession(browser);
   const page = await s.context.newPage();
   await page.goto(MOCK + '?view=form&code=5909876543210');
   // Save first, then a field is filled, then a button that does not come: continuing must fill the field again
@@ -630,4 +631,64 @@ test('a link whose caption deletes or saves is guarded like a button', async ({ 
   await page.locator('[id="del"]').click();
   const rec = await page.evaluate(() => JSON.parse(localStorage.getItem('autoRec')));
   expect(rec.actions[0]).toMatchObject({ t: 'click', text: 'Delete' });
+});
+
+/* ---------- validation rules in Play ---------- */
+
+const NEVER = { type: 'notEmpty', a: at('no-such-field', 'Missing field'), ci: false }; // a rule that always fails
+
+test('a rule before Save is checked even when "Save?" is never asked', async ({ browser }) => {
+  const s = await newSession(browser);
+  const page = await s.context.newPage();
+  await page.goto(MOCK + '?view=form&code=5909876543210');
+  const noAsk = FORM.map(a => { const b = { ...a }; delete b.confirm; return b; });
+  await page.evaluate(([m, r]) => localStorage.setItem('autoCfg', JSON.stringify({ v: 4, macro: m, opts: { waitSec: 5 }, rules: r })),
+    [noAsk, [{ ...NEVER, when: 'beforeSave' }]]);
+  await page.evaluate(bookmarklet('play'));
+  expect(await waitDialog(s.dialogs, 'Play stopped', 30000)).toContain('Validation failed, nothing was saved');
+  expect(await saves(page)).toBe(0);
+});
+
+test('rules that no step would reach are refused before anything is done', async ({ browser }) => {
+  const s = await newSession(browser);
+  const page = await s.context.newPage();
+  await page.goto(MOCK + '?view=form&code=5909876543210');
+  const okButton = FORM.map(a => (a.t === 'click' ? { ...a, text: a.text === 'Save' ? 'OK' : a.text, confirm: undefined } : a));
+  await page.evaluate(([m, r]) => localStorage.setItem('autoCfg', JSON.stringify({ v: 4, macro: m, opts: {}, rules: r })),
+    [okButton, [{ ...NEVER, when: 'beforeSave' }]]);
+  await page.evaluate(bookmarklet('play'));
+  expect(await waitDialog(s.dialogs, 'The recording has validation rules to check before Save')).toContain('Nothing was done');
+  expect(await page.locator('[id="pt1:r2:0:it3::content"]').inputValue()).toBe('');
+});
+
+test('a rule before Generate stops Play after Save, before the next click', async ({ browser }) => {
+  const s = await newSession(browser);
+  const page = await s.context.newPage();
+  await page.goto(MOCK + '?view=form&code=5909876543210');
+  await page.evaluate(([m, r]) => localStorage.setItem('autoCfg', JSON.stringify({ v: 4, macro: m, opts: { waitSec: 5 }, rules: r })),
+    [FORM, [{ ...NEVER, when: 'beforeGenerate' }]]);
+  await page.evaluate(bookmarklet('play'));
+  expect(await waitDialog(s.dialogs, 'Play stopped', 30000)).toContain('Validation failed before the next step after Save');
+  expect(await saves(page)).toBe(1);
+  await expect(page.locator('[id="pt1:r3:0:cb_gen"]')).toHaveText('Generate'); // not clicked
+});
+
+test('after a blocked new tab, continuing clicks the button that opens it again', async ({ browser }) => {
+  const s = await newSession(browser);
+  const page = await s.context.newPage();
+  await page.goto(MOCK);
+  await saveMacro(page, TO_FORM.concat(FORM, PRINT_TAIL), { waitSec: 3 });
+  await page.evaluate(() => { window.__open = window.open; window.open = () => null; }); // pop-ups blocked
+  await page.locator('[data-c="5909876543210"]').click();
+  await page.evaluate(bookmarklet('play'));
+  const msg = await waitDialog(s.dialogs, 'Play stopped', 40000);
+  expect(msg).toContain('the new tab is not open');
+  expect(msg).toContain('Or continue at step 9'); // Print, not Apply
+  await page.evaluate(() => { window.open = window.__open; }); // pop-ups allowed
+  s.dialogs.length = 0;
+  const popupP = page.waitForEvent('popup');
+  await page.evaluate(bookmarklet('play'));
+  expect(await waitDialog(s.dialogs, 'The last run in this tab')).toContain('OK = continue at step 9');
+  await printed(await popupP);
+  expect(await saves(page)).toBe(1);
 });

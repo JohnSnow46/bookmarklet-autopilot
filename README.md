@@ -25,17 +25,18 @@
 1. Type or scan the next code.
 2. Click **Play**.
 3. When it asks **Save?**, look at the form. Correct? Press **OK**. Something wrong? Press **Cancel**.
-4. Done. Go back to the **first tab**, enter the next code, **Play** again.
+4. Done. Go back to the **first tab**, go back to the screen with the code field (in the demo: **New scan**), enter the next code, **Play** again.
+5. The page reloaded completely while Play was working? Click **Play** again within a minute: it carries on where it was.
 
 **Need the button that only appears after a refresh?** (e.g. **Print** after a document is generated)
 
-Play waits, then stops and says **"continue at step N"**. Refresh the page (F5) and click **Play** again: it carries on at that step and does **not** save again.
+Play waits, then stops and says **"continue at step N"**. Refresh the page (F5) until the button is there, click **Play** and press **OK** to continue: it carries on at that step and does **not** save again.
 
 **If something goes wrong**
 
 - Play stops and shows a message saying **which step** and **why**. Do that step by hand, or record again.
 - Want to stop it? Press **Esc** or **Cancel** on the blue bar (in Series: **Stop**).
-- You pressed **Cancel** at **Save?**: nothing was saved by that step. Fix the form by hand, or start again with the code.
+- You pressed **Cancel** at **Save?**: nothing was saved by that step. Fix the form by hand and click Save yourself, or go back to the code field and start again.
 - Nothing happens at all when you click a bookmark? Your browser may block it on that page: try the demo first, from the address above.
 - The message says Save **"was already clicked"**? Check in the application whether it was saved **before** you click Play again.
 - Not sure whether it will work on this screen? Click **Dry run**. It only checks, it clicks nothing.
@@ -88,6 +89,7 @@ never undone.
 
 Play is careful with Save:
 
+- Validation rules (Validate) are checked by Play too: *before Save* before every click that saves (with or without the "Save?" question), *before Generate* before the first click after it. A recording where Play could not tell where that is is refused, never run without the rules.
 - Only one Play, Series or Auto runs on a page at a time; a second click is refused, so nothing is saved twice in parallel.
 - If a Save-like step (one that asks "Save?", or whose caption looks like save, submit, send, delete, …) was clicked
   and the run then stopped, was cancelled, or a page reload after it was not continued within a minute, the stop
@@ -109,7 +111,7 @@ Three helpers built from the same Play code:
 - **Dry run** - the safe first test. It checks which recorded steps it can find *on the screen as it is now*,
   highlights them, and reports `OK` / `not on this screen` / `found, but hidden` (or disabled, or with another caption)
   per step, plus the current state of the rules. It clicks and types nothing. Run it on each screen of the routine.
-- **Series** - many items in a row. Click it once; it waits for an input, runs, waits for the next one, runs again,
+- **Series** - many items in a row. Click it once; it waits for an input, runs, waits for the next one (go back to the screen with the code field yourself, e.g. *New scan*), runs again,
   until you press *Stop* on its bar (Stop also stops a run that is under way). An input counts once it has finished being typed (a barcode scanner types very
   fast); after a run the field has to be empty again (or gone) first, so two identical inputs one after another are
   two items. Full page reloads end a series (the script dies with the page): use Play there.
