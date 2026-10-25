@@ -47,6 +47,31 @@ test('a malformed recording is refused before its first step is done', async ({ 
   expect(await page.locator('[id="log"]').textContent()).not.toContain('Search:'); // step 1 was never clicked
 });
 
+/* ---------- finding elements ---------- */
+
+// A recording whose scan field is found by an id that no longer exists, so only the fallback name="q" is left.
+const SCAN_BY_NAME = { t: 'set', win: 0, src: 'scan', loc: { frame: [], sel: '[id="old-id"]', alt: 'input[name="q"]', label: 'Product code' } };
+const nameTheSearchField = (page, twins) => page.evaluate(n => {
+  const el = document.getElementById('pt1:r1:0:it1::content');
+  el.setAttribute('name', 'q');
+  for (let i = 0; i < n; i++) { const t = document.createElement('input'); t.name = 'q'; t.className = 'twin'; el.after(t); }
+}, twins);
+
+test('a fallback selector is used only while it matches exactly one element', async ({ browser }) => {
+  const s = await newSession(browser);
+  const page = await s.context.newPage();
+  await page.goto(MOCK);
+  await page.evaluate(m => localStorage.setItem('autoCfg', JSON.stringify({ v: 4, macro: m, opts: {}, rules: [] })), [SCAN_BY_NAME]);
+  await nameTheSearchField(page, 0);
+  await page.evaluate(bookmarklet('dryrun'));
+  expect(await waitDialog(s.dialogs, 'Dry run')).toContain('1. type the scanned code into "Product code": OK');
+
+  await nameTheSearchField(page, 1); // now two fields are called q: neither may be guessed
+  s.dialogs.length = 0;
+  await page.evaluate(bookmarklet('dryrun'));
+  expect(await waitDialog(s.dialogs, 'Dry run')).not.toContain('"Product code": OK');
+});
+
 test('Record and Learn start over when their saved state is damaged', async ({ browser }) => {
   const s = await newSession(browser);
   const page = await s.context.newPage();

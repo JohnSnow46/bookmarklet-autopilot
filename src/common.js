@@ -96,11 +96,19 @@ const framePath = el => {
   return p;
 };
 
-// Element for a stored locator {frame, sel, alt}: the main selector first, then the stable-attribute fallback.
+// Elements the stable-attribute fallback selector matches now (it was unique when it was stored).
+const altMatches = (c, dd) => { try { return c.alt ? [...dd.querySelectorAll(c.alt)] : []; } catch (_) { return []; } };
+
+// Element for a stored locator {frame, sel, alt}: the main selector first, then the fallback, which is used only
+// while it still matches exactly one element (never the first of several).
 const locate = (c, d = document) => {
   const dd = docFor(c.frame, d);
   if (!dd) return null;
-  try { return dd.querySelector(c.sel) || (c.alt ? dd.querySelector(c.alt) : null); } catch (_) { return null; }
+  let el = null;
+  try { el = dd.querySelector(c.sel); } catch (_) {}
+  if (el) return el;
+  const m = altMatches(c, dd);
+  return m.length === 1 ? m[0] : null;
 };
 
 // Finds the visible, enabled element stored under key k (null if it is not there).
