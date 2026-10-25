@@ -1,5 +1,40 @@
 # Bookmarklet Autopilot
 
+## Quick instructions (5 minutes)
+
+**Once: install**
+
+1. Open <https://johnsnow46.github.io/bookmarklet-autopilot/>
+2. Turn on the bookmarks bar: press **Ctrl+Shift+B**.
+3. Drag the **Record**, **Play** and **Dry run** buttons onto the bookmarks bar.
+
+**Once: record what you do**
+
+1. Open your application, on the screen where your work starts.
+2. Click **Record** in the bookmarks bar. A red bar appears at the top.
+3. Do your work **once**, normally, until the end.
+4. Click **Stop and review** on the red bar.
+5. Questions appear. If you are not sure, just press **OK** each time.
+6. A green bar says **Done!**. The recording is saved.
+
+**Every time: let it work for you**
+
+1. Type or scan the next code.
+2. Click **Play**.
+3. When it asks **Save?**, look at the form. Correct? Press **OK**. Something wrong? Press **Cancel**.
+4. Done. Next code, **Play** again.
+
+**If something goes wrong**
+
+- Play stops and shows a message saying **which step** and **why**. Do that step by hand, or record again.
+- Want to stop it? Press **Esc** or **Cancel** on the blue bar.
+- The message says Save **"was already clicked"**? Check in the application whether it was saved **before** you click Play again.
+- Not sure whether it will work on this screen? Click **Dry run**. It only checks, it clicks nothing.
+
+Want screenshots? See the [step-by-step guide](docs/GUIDE.md).
+
+---
+
 Record a repetitive routine in any web application once, then replay it with one click, using nothing but
 **browser bookmarks**. No extensions, no installs, no admin rights, nothing leaves the browser.
 
