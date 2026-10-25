@@ -43,10 +43,14 @@ const waitFor = async (fn, what, t = 20000) => {
   throw new Error('Element did not appear: ' + what);
 };
 
-// Like waitFor, but stops early with the text returned by bad() (an application error).
-const waitForOr = async (ok, bad, what, t = 20000) => {
+// The error a run stops with when the user cancels it.
+const cancelled = () => Object.assign(new Error('Cancelled by the user.'), { cancel: true });
+
+// Like waitFor, but stops early with the text returned by bad() (an application error), or when halt() says so.
+const waitForOr = async (ok, bad, what, t = 20000, halt) => {
   const t0 = Date.now();
   while (Date.now() - t0 < t) {
+    if (halt && halt()) throw cancelled();
     let r = null, e = null;
     try { r = ok(); } catch (_) {}
     if (r) return r;
@@ -208,6 +212,7 @@ const makeBar = id => {
   const b = document.createElement('div');
   b.id = id;
   b.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:2147483647;background:rgb(31,111,178);color:white;font:15px Arial;padding:10px 14px';
+  b.setAttribute('aria-live', 'polite'); // screen readers announce the progress
   document.body.appendChild(b);
   return b;
 };

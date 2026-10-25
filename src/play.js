@@ -69,8 +69,9 @@ const listRows = (a, d, profile) => {
   return narrowed.length ? narrowed : all;
 };
 
-// One run of the recording. Returns 'ok', or 'cancelled' when "Save?" was declined; throws on a problem.
-const run = async st => {
+// One run of the recording. Returns 'ok', or 'cancelled' when "Save?" was declined; throws on a problem, and
+// throws cancelled() when ctl.halt() says the user stopped it. ctl.progress(i) is told which step starts.
+const run = async (st, ctl) => {
   const wins = {}; // wins[1] = the new tab opened by the page
   const oo = window.open;
   let i = st ? st.i : 0, watch = null; // watch: error texts that were already on screen before Save
@@ -86,12 +87,14 @@ const run = async st => {
   try {
     for (; i < M.length; i++) {
       const a = M[i];
+      if (ctl.halt()) throw cancelled(); // between steps; a click that was already sent is never undone
       run.stage = 'step ' + (i + 1) + ' (' + say(a) + ')';
+      ctl.progress(i);
       writeState(i, profile); // an interrupted step is retried; a click that went through is not repeated (see below)
       const root = () => (a.win ? wins[1] && wins[1].document : document);
       // Waits until fn finds what it needs; on a timeout why() says what is wrong (hidden, disabled, ambiguous...).
       const wait = (fn, what, why) => waitForOr(() => { const d = root(); return d ? fn(d) : null; },
-        () => (watch ? errorTexts().find(x => !watch.includes(x)) : null), what, WAIT).catch(e => {
+        () => (watch ? errorTexts().find(x => !watch.includes(x)) : null), what, WAIT, ctl.halt).catch(e => {
         if (!e.timeout) throw e;
         const d = root();
         throw new Error('Cannot use ' + what + ': ' + (d ? why(d) : 'the new tab is not open') + ' (waited ' + WAIT / 1000 + ' s).');
@@ -229,7 +232,12 @@ const series = async () => {
     show('Working on product ' + (done + 1) + '...');
     t0 = Date.now();
     let r;
-    try { r = await run(null); } catch (e) { log('stopped', e); show('Stopped.'); alert('Series stopped at ' + run.stage + ':\n' + e.message); break; }
+    try {
+      r = await run(null, { halt: () => stop, progress: i => { if (!stop) show('Working on product ' + (done + 1) + ': step ' + (i + 1) + '/' + M.length + '.'); } });
+    } catch (e) {
+      if (e.cancel) { log('cancelled', e); break; } // Stop pressed during a run
+      log('stopped', e); show('Stopped.'); alert('Series stopped at ' + run.stage + ':\n' + e.message); break;
+    }
     log(r);
     if (r !== 'ok') break;
     done++;
@@ -243,10 +251,34 @@ const series = async () => {
   if (MODE === 'series') return series();
   const st = readState();
   if (st && st.t0) t0 = st.t0;
+  // A bar with the progress and Cancel (also Esc) while Play works; removed whatever the outcome.
+  const bar = makeBar('__play');
+  let stop = false;
+  const show = (msg, end) => {
+    bar.textContent = '';
+    const b = document.createElement('b');
+    b.textContent = 'Play: ';
+    bar.appendChild(b);
+    bar.appendChild(document.createTextNode(msg));
+    if (!end) barButton(bar, 'Cancel (Esc)', () => { stop = true; show('Cancelling...'); });
+  };
+  const esc = e => { if (e.key === 'Escape' && !stop) { stop = true; show('Cancelling...'); } };
+  document.addEventListener('keydown', esc, true);
+  const finish = (msg, color) => {
+    document.removeEventListener('keydown', esc, true);
+    if (!msg) return bar.remove();
+    show(msg, true);
+    bar.style.background = color;
+    setTimeout(() => bar.remove(), 3000);
+  };
   try {
-    log(await run(st));
+    const r = await run(st, { halt: () => stop, progress: i => { if (!stop) show('step ' + (i + 1) + '/' + M.length + ': ' + say(M[i])); } });
+    log(r);
+    finish(r === 'ok' ? 'Done, ' + M.length + ' steps.' : 'Cancelled at "Save?", nothing was saved.', r === 'ok' ? 'rgb(46,125,50)' : 'rgb(90,90,90)');
   } catch (e) {
+    if (e.cancel) { log('cancelled', e); finish('Cancelled at ' + run.stage + '.', 'rgb(90,90,90)'); return; }
     log('stopped', e);
+    finish();
     alert('Play stopped at ' + run.stage + ':\n' + e.message);
   }
 })();

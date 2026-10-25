@@ -101,6 +101,61 @@ test('when Play gives up waiting it says why the element cannot be used', async 
   }
 });
 
+/* ---------- progress and cancelling ---------- */
+
+for (const how of ['the Cancel button', 'Esc']) {
+  test('Play shows its progress and can be cancelled with ' + how + ' while it waits', async ({ browser }) => {
+    const s = await newSession(browser);
+    const page = await s.context.newPage();
+    await page.goto(MOCK);
+    await saveMacro(page, [SCAN, { t: 'click', win: 0, loc: SEARCH_BTN, text: 'Search' }], { waitSec: 60 });
+    await page.locator('[data-c="5909876543210"]').click();
+    await page.evaluate(() => { document.getElementById('pt1:r1:0:cb1').disabled = true; }); // Play has to wait
+    await page.evaluate(bookmarklet('play'));
+    const bar = page.locator('[id="__play"]');
+    await expect(bar).toContainText('step 2/2: click "Search"');
+    if (how === 'Esc') await page.keyboard.press('Escape');
+    else await bar.getByRole('button', { name: 'Cancel (Esc)' }).click();
+    await expect(bar).toContainText('Cancelled at step 2');
+    await expect(bar).toHaveCount(0, { timeout: 5000 }); // the bar cleans up after itself
+    await page.evaluate(() => { document.getElementById('pt1:r1:0:cb1').disabled = false; });
+    await page.waitForTimeout(500);
+    expect(await page.locator('[id="log"]').textContent()).not.toContain('Search:'); // never clicked
+    expect(s.dialogs).toEqual([]); // a cancel is not an error
+    const L = await page.evaluate(() => JSON.parse(localStorage.getItem('autoLog')));
+    expect(L.map(x => x.result + ':' + x.why)).toEqual(['cancelled:Cancelled by the user.']);
+  });
+}
+
+test('Stop in Series also stops a run that is under way', async ({ browser }) => {
+  const s = await newSession(browser);
+  const page = await s.context.newPage();
+  await page.goto(MOCK);
+  await saveMacro(page, [SCAN, { t: 'click', win: 0, loc: SEARCH_BTN, text: 'Search' }], { waitSec: 60 });
+  await page.evaluate(() => { document.getElementById('pt1:r1:0:cb1').disabled = true; });
+  await page.evaluate(bookmarklet('series'));
+  await page.locator('[id="pt1:r1:0:it1::content"]').fill('5909876543210');
+  const bar = page.locator('[id="__series"]');
+  await expect(bar).toContainText('Working on product 1: step 2/2.');
+  await bar.getByRole('button', { name: 'Stop' }).click();
+  expect(await waitDialog(s.dialogs, 'Series finished')).toBe('Series finished: 0 product(s).');
+  const L = await page.evaluate(() => JSON.parse(localStorage.getItem('autoLog')));
+  expect(L.map(x => x.result + ':' + x.mode)).toEqual(['cancelled:series']);
+});
+
+test('Play says when it is done and removes its bar', async ({ browser }) => {
+  const s = await newSession(browser);
+  const page = await s.context.newPage();
+  await page.goto(MOCK);
+  await saveMacro(page, [SCAN, { t: 'click', win: 0, loc: SEARCH_BTN, text: 'Search' }]);
+  await page.locator('[data-c="5909876543210"]').click();
+  await page.evaluate(bookmarklet('play'));
+  const bar = page.locator('[id="__play"]');
+  await expect(bar).toContainText('Done, 2 steps.');
+  await expect(bar).toHaveCount(0, { timeout: 5000 });
+  expect(s.dialogs).toEqual([]);
+});
+
 test('Record and Learn start over when their saved state is damaged', async ({ browser }) => {
   const s = await newSession(browser);
   const page = await s.context.newPage();

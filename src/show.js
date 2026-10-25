@@ -27,7 +27,7 @@ if (Array.isArray(L) && L.length) {
   const top = Object.entries(where).sort((p, q) => q[1] - p[1]).slice(0, 5).map(([k, n]) => n + 'x ' + k);
   alert('Run log (' + L.length + ' runs since ' + L[0].at.slice(0, 10) + ')\n'
     + 'Today: ' + today.length + ' runs, ' + today.filter(x => x.result === 'ok').length + ' completed\n'
-    + 'All: ' + ok.length + ' completed, ' + L.filter(x => x.result === 'stopped').length + ' stopped, ' + L.filter(x => x.result === 'cancelled').length + ' cancelled at "Save?"\n'
+    + 'All: ' + ok.length + ' completed, ' + L.filter(x => x.result === 'stopped').length + ' stopped, ' + L.filter(x => x.result === 'cancelled').length + ' cancelled (at "Save?" or by Cancel)\n'
     + 'Average time of a completed run: ' + avg + ' s'
     + (top.length ? '\n\nWhere runs stopped most often:\n' + top.join('\n') : ''));
   if (!confirm('Keep the run log? (OK = keep, Cancel = clear it)')) drop('autoLog');
