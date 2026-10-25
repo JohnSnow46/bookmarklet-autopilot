@@ -36,21 +36,37 @@ short questions:
 
 Then enter an input and click **Play**. It repeats the recording, copies fields that were copied while recording, takes
 over the new tab, and stops with the step and the reason if something differs (a field that does not keep its value, a
-row that is missing or ambiguous, an error shown by the application after Save). **Export** turns a recording into a
+row that is missing or ambiguous, an error shown by the application after Save). When it gives up waiting for an
+element it says why: not on this screen, hidden, disabled, another caption, an iframe it cannot reach, or a fallback
+selector that now matches several elements (it never takes the first of several). While it works a bar shows the
+current step; **Cancel** (or **Esc**) stops it before the next step or while it waits. A click that was already sent is
+never undone.
+
+Play is careful with Save:
+
+- Only one Play, Series or Auto runs on a page at a time; a second click is refused, so nothing is saved twice in parallel.
+- If a step that asks "Save?" was clicked and the run then stopped, was cancelled, or a page reload after it was not
+  continued within a minute, the stop message says the data **may already be saved**, and the next Play or Series in
+  that tab explains this and asks before starting again from step 1. It never repeats a Save on its own.
+- A recording or configuration that is damaged, malformed or made by a newer version is refused before the first step,
+  with the reason; nothing is clicked.
+
+**Export** turns a recording into a
 Play bookmarklet with the recording built in, to share or to use on another computer (the name and organization of
 whoever runs it are asked on first use).
 
 Three helpers built from the same Play code:
 
 - **Dry run** - the safe first test. It checks which recorded steps it can find *on the screen as it is now*,
-  highlights them, and reports `OK` / `not on this screen` / `found, but hidden, disabled or with another caption` per
-  step, plus the current state of the rules. It clicks and types nothing. Run it on each screen of the routine.
+  highlights them, and reports `OK` / `not on this screen` / `found, but hidden` (or disabled, or with another caption)
+  per step, plus the current state of the rules. It clicks and types nothing. Run it on each screen of the routine.
 - **Series** - many items in a row. Click it once; it waits for an input, runs, waits for the next one, runs again,
-  until you press *Stop* on its bar. An input counts once it has finished being typed (a barcode scanner types very
+  until you press *Stop* on its bar (Stop also stops a run that is under way). An input counts once it has finished being typed (a barcode scanner types very
   fast); after a run the field has to be empty again (or gone) first, so two identical inputs one after another are
   two items. Full page reloads end a series (the script dies with the page): use Play there.
 - **Run log** - Play and Series append each run to a log on this computer: time, duration, result (completed / stopped /
-  cancelled at "Save?") and the step where it stopped, **without inputs, field values or people**. *Show* summarises it
+  cancelled) and the step where it stopped, **without inputs, typed texts, field values or people** (a step is logged as
+  e.g. `step 5 (type a fixed text into "Line 3")`). *Show* summarises it
   (runs today, average time of a completed run, where runs stop most often), so you can see how much time it saves.
 
 Learn and Auto below remain as the advanced, fully controlled variant.
@@ -105,6 +121,10 @@ element ids as yours (generated ids may differ, see the notes below).
 - **Generated ids** (common in enterprise UI frameworks) may change between sessions. Learn warns about ids that look generated and stores a fallback selector from stable attributes (`name`, `aria-label`, …) that is used when the id stops matching.
 - **Error detection** after Save uses the element you may teach as the last Learn step plus a best-effort heuristic (`role=alert`, common error classes).
 - **Save buttons** are recognised by their caption (`Save`, `Submit`, and a few non-English ones).
+- **Slow applications:** Play waits up to 30 s for each element. The configuration accepts `opts.waitSec` (1-600) to change
+  that; there is no menu for it yet.
+- **Blocked or damaged storage** (some sandboxed frames, strict browser settings, a full quota): every bookmarklet says so
+  instead of failing silently. A damaged recording in progress or learning state simply starts over.
 
 ## Design constraints
 
@@ -177,7 +197,9 @@ docs/       installer page for GitHub Pages (generated) and SECURITY.md
 ```
 
 The build wraps `common.js` + a script in an IIFE, minifies it with terser and **fails** if the result contains
-`#`, `%`, a newline, or any network/dynamic-code API (`fetch`, `XMLHttpRequest`, `eval`, …).
+`#`, `%`, a newline, an unfilled placeholder, or any network, navigation, loader or dynamic-code API (`fetch`,
+`XMLHttpRequest`, `eval`, workers, `postMessage`, `createElement('script')`, …). `npm test` rebuilds first, and a test
+checks that `dist/` is exactly what the sources build to.
 
 ## Roadmap
 
@@ -190,6 +212,8 @@ The build wraps `common.js` + a script in an IIFE, minifies it with terser and *
 - [x] Installer page for GitHub Pages
 - [x] Record and Play (no step-by-step teaching), Export of recordings
 - [x] Dry run, Series, run log
+- [x] Reliability: one run per page, no repeated Save after an unfinished run, Cancel/Esc with a progress bar, reasons
+  for every wait that gives up, no guessing between several fallback matches, safe handling of damaged storage
 
 ## Security
 

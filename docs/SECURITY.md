@@ -10,11 +10,16 @@ types for you) and also the whole risk: the code you paste into a bookmark is tr
 
 - The code is short (1-7 KB per bookmarklet) and readable in `src/`; reviewing it before use is realistic.
 - It never talks to the network. The build **fails** if a bookmarklet contains `fetch`, `XMLHttpRequest`, `sendBeacon`,
-  `WebSocket`, `EventSource`, `eval`, `new Function`, `importScripts`, `import(` or `document.cookie`.
+  `WebSocket`, `EventSource`, `eval`, `new Function`, `importScripts`, `import(`, `document.cookie`, workers,
+  `postMessage`, `srcdoc`, `document.write`, `new Image`, navigation (`.href=`, `location.assign/replace`), creation of
+  elements that load a URL (`script`, `iframe`, `img`, `link`, `object`, `embed`, media, `style`), or a build placeholder
+  that was not filled. A test checks the guard itself and that `dist/` matches a fresh build of `src/`.
 - It has no runtime dependencies. `terser` and Playwright are build/test tools only and are not part of the output.
 - Record never records password or hidden fields; typed values of other fields stay in the recording (they are what Play types), which is why Export lists them first.
 - It reads and writes only `localStorage` keys on the page's own origin: `autoLearn` (learning state), `autoCfg`
-  (configuration and rules) and `autoRec` (the recording in progress, emptied when saved), `autoLog` (run log: time, duration, result, step - no codes, products or people; last 500 runs; *Show* can clear it), `playState` (sessionStorage, step counter of a running Play), `autoProfiles` and `autoProfileIdx` (the name/organization a person typed or chose on this computer).
+  (configuration and rules) and `autoRec` (the recording in progress, emptied when saved), `autoLog` (run log: time, duration, result, step described without typed or chosen texts - no codes, products or people; last 500 runs; *Show* can clear it), `playState` (sessionStorage: step counter of a running Play, the profile in use, the last clicked "Save?" step and a hash of the recording; removed when the run ends), `playUncertain` (sessionStorage: time, step number and recording hash of a Save that a run clicked before it stopped; no values), `autoProfiles` and `autoProfileIdx` (the name/organization a person typed or chose on this computer).
+- Every read of this storage tolerates blocked storage and damaged data: the bookmarklet reports it and does nothing, it does not fail half-way. Other scripts of the same origin can read and change these keys, so a configuration is checked for shape before Play acts on it, and an unknown or newer version is refused.
+- Besides `localStorage`, the bookmarklets set one page global, `window.__autopilotRun`, which holds the name of the running Play/Series/Auto so that a second click is refused.
 - The only other effects are clicks, typing into fields, the "Save?" question, alerts/prompts, and (Export) one clipboard write.
 
 ## Data handling
@@ -55,6 +60,20 @@ can read the configuration. Share it only with people who should see it.
 | 17 | Export put fixed texts of the recording in the exported code without showing them. | Low-Medium | **Fixed**: Export lists every fixed text and the append text and asks before copying; Cancel copies nothing. |
 | 18 | Dry run must never change data. | - | By design: it only locates and outlines elements; a test checks that no field is typed into and nothing is clicked. |
 | 13 | Selecting a person in a searchable list could pick the wrong person (same name, two organizations). | Medium (data quality) | Mitigated: exactly one matching row is required, otherwise Auto stops, lists the rows and selects nothing. |
+
+Second review, 2026-10-25 (reliability and data safety):
+
+| # | Finding | Severity | Status |
+| --- | --- | --- | --- |
+| 19 | Two Play/Auto runs could work on the same page at once (double click, Play during Series), each asking "Save?" and saving. | Medium (duplicate data) | **Fixed**: one run per page (`window.__autopilotRun`); a second click is refused. Test. |
+| 20 | After a Save was clicked and the run then stopped, or a reload after Save was not continued within 60 s, the next Play started from step 1 and could save the same data again, without a word. | Medium (duplicate data) | **Fixed**: the clicked "Save?" step is remembered per tab; the stop message says the data may already be saved, and the next Play/Series asks before starting over. Nothing is retried automatically. Tests for both paths. Limitation: sessionStorage is per tab, so a new tab does not know about it. |
+| 21 | The fallback selector was taken with `querySelector`, i.e. the first of several matches once it was no longer unique. | Medium (wrong element) | **Fixed**: the fallback is used only while it matches exactly one element; Play and Dry run say when it is ambiguous. Test. |
+| 22 | Damaged or blocked `localStorage` made bookmarklets throw before showing anything; a failing log write could hide the stop message. | Low-Medium (silent failure) | **Fixed**: all storage access goes through helpers that never throw; damaged, unreadable or newer-version configurations are reported. Tests. |
+| 23 | A malformed or hand-edited recording (embedded or stored) could fail with a script error after some steps were already done. | Low-Medium | **Fixed**: Play checks the shape of every step before the first one. Test. |
+| 24 | The run log stored the step text including fixed typed texts and fixed list choices. | Low (data minimisation) | **Fixed**: the log describes steps without values; the on-screen message still shows them. Test. |
+| 25 | The resume state matched a recording only by its number of steps. | Low | **Fixed**: the state carries a hash of the recording. |
+| 26 | The build guard did not cover workers, `postMessage`, navigation or elements that load URLs; `dist/` could be stale against `src/` while tests passed. | Low (supply chain) | **Fixed**: wider guard, `pretest` rebuild and a test that compares `dist/` with a fresh build. |
+| 27 | Exported bookmarklets made before this review keep their old built-in Play code. | Info | Accepted: the configuration format is unchanged (v4), so re-exporting gives the new behaviour. |
 
 ## Owner's tasks for the installer
 

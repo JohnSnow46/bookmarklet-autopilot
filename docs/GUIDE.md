@@ -125,8 +125,13 @@ system print dialog.
 
 ![Play finished in the new tab](guide/18-play-done.png)
 
+While Play works, a bar at the top shows the current step. **Cancel** on the bar (or **Esc**) stops it before the next
+step.
+
 If something is different from the recording (a missing button, two matching rows, an error from the application),
-Play stops and says at which step and why. Nothing is saved on a guess.
+Play stops and says at which step and why. Nothing is saved on a guess. If it stops *after* Save was clicked, the
+message says so: check in the application whether the item was saved. The next Play in that tab asks before starting
+again, so the same item is not saved twice by accident.
 
 ## 7. Many items: Series
 
