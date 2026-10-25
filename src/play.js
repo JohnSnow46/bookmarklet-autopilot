@@ -25,6 +25,7 @@ const macroProblem = M => {
     if (a.t === 'set' && a.src === 'copy' && !isLoc(a.from)) return bad('the field to copy from is missing');
     if (a.t === 'set' && !a.src && typeof a.value !== 'string') return bad('the text to type is missing');
     if (a.text !== undefined && typeof a.text !== 'string') return bad('the caption is not a text');
+    if (a.cap !== undefined && typeof a.cap !== 'string') return bad('the caption is not a text');
     if ((a.t === 'row' || a.t === 'select') && a.mode === 'fixed' && !a.text) return bad('the choice to make is missing');
   }
   return '';
@@ -38,60 +39,91 @@ const M = cfg.macro, O = cfg.opts || {}, R = Array.isArray(cfg.rules) ? cfg.rule
 const SCAN = M.find(a => a.src === 'scan');
 const WAIT = (O.waitSec >= 1 && O.waitSec <= 600 ? O.waitSec : 30) * 1000; // how long a step waits for its element
 
-// Clicks that may change data: the ones that ask "Save?", and any click whose caption looks like saving or sending.
-const heavy = a => a.t === 'click' && (!!a.confirm || SAVE_LIKE.test(a.text || ''));
-// Rules "before Save" are checked before every such click, rules "before Generate" before the first click after one.
-// A rule that no step would ever reach is refused here: it must never be skipped without a word.
-{
+// Steps that may change data: the ones that ask "Save?", and clicks whose caption looks like saving, sending or
+// deleting. A link (also one inside a list row) keeps only that word (cap), never the rest of its text.
+const clicks = a => a.t === 'click' || a.t === 'row';
+const heavy = a => clicks(a) && (!!a.confirm || SAVE_LIKE.test((a.t === 'click' && a.text) || a.cap || ''));
+// Rules "before Save" are checked once, before the step that saves: the first that asks "Save?", else the first
+// data-changing one. Rules "before Generate" before the first click after that step. The start check and the run use
+// these same two steps, and a rule that no step would reach is refused: it must never be skipped without a word.
+const SAVE_AT = (k => (k >= 0 ? k : M.findIndex(heavy)))(M.findIndex(a => clicks(a) && a.confirm));
+const GEN_AT = SAVE_AT < 0 ? -1 : M.findIndex((a, k) => k > SAVE_AT && clicks(a));
+if (MODE !== 'dry') { // Dry run changes nothing, and reports the rules itself
   const has = w => R.some(r => r && r.when === w);
-  const saveAt = M.findIndex(heavy);
-  const unchecked = has('beforeSave') && saveAt < 0 ? 'before Save'
-    : has('beforeGenerate') && !M.some((a, i) => a.t === 'click' && i > saveAt && saveAt >= 0) ? 'before Generate' : '';
-  if (unchecked) {
-    alert('The recording has validation rules to check ' + unchecked + ', but Play cannot tell which step '
-      + (unchecked === 'before Save' ? 'saves' : 'comes after Save') + ', so they would never be checked. Nothing was done.\n'
-      + 'Record again and give the Save step at "Ask Save? before which steps?", or remove those rules with Validate.');
+  if (has('beforeSave') && SAVE_AT < 0) {
+    alert('The recording has validation rules to check before Save, but Play cannot tell which step saves, so they would '
+      + 'never be checked. Nothing was done.\nRecord again and give the Save step at "Ask Save? before which steps?", or remove those rules with Validate.');
+    return;
+  }
+  if (has('beforeGenerate') && GEN_AT < 0) {
+    alert('The recording has validation rules to check before Generate, but no click comes after the step that saves (step '
+      + (SAVE_AT + 1) + '), so they would never be checked. Nothing was done.\nRemove those rules with Validate, or record the routine up to its end.');
     return;
   }
 }
 
 // The page may reload in the middle (and this script with it): clicking Play again continues for 60 seconds.
 // The state belongs to this recording (h) and remembers the last data-changing step that was clicked (c).
-// A tab opened by the page gets a copy of this tab's sessionStorage, so the state also says which kind of tab wrote it.
+// A tab opened by the page gets a copy of this tab's sessionStorage, so the state also says which tab wrote it (TAB:
+// an id per tab; a copy of the opener's id is replaced by a new one).
 const PK = 'playState', UK = 'playUncertain';
-const HASH = [...JSON.stringify(M)].reduce((h, ch) => (h * 33 + ch.charCodeAt(0)) | 0, 5381);
-const OPENED = !!window.opener;
-const mine = s => !!s && s.h === HASH && !!s.o === OPENED;
+const djb = t => [...t].reduce((h, ch) => (h * 33 + ch.charCodeAt(0)) | 0, 5381);
+const HASH = djb(JSON.stringify(M));
+const TAB = (() => {
+  let id = getJSON('playTab', true), copy = false;
+  try { copy = !!id && !!window.opener && JSON.parse(window.opener.sessionStorage.getItem('playTab')) === id; } catch (e) { /* another origin */ }
+  if (typeof id !== 'string' || copy) { id = Math.random().toString(36).slice(2); setJSON('playTab', id, true); }
+  return id;
+})();
+const mine = s => !!s && s.h === HASH && s.o === TAB;
+// The scanned code on screen now, as a number (0 = none): tells a new item from the one a stopped run worked on.
+const codeKey = () => { const el = SCAN && !SCAN.win && locate(SCAN.loc); const v = el && shown(el) ? el.value.trim() : ''; return v ? djb(v) : 0; };
 const readState = () => {
   const s = getJSON(PK, true);
   return mine(s) && s.n === M.length && s.i < s.n && Date.now() - s.t < 60000 ? s : null;
 };
 let t0 = Date.now(); // start of the current run (kept across reloads for the log)
-const writeState = (i, p, c, t = Date.now()) => setJSON(PK, { i, n: M.length, t, p, t0, c, h: HASH, o: OPENED }, true);
+// i: the next step, c: the last data-changing step, k: the last click that went through, q: the code (codeKey)
+const writeState = (i, p, c, k, q, t = Date.now()) => setJSON(PK, { i, n: M.length, t, p, t0, c, k, q, h: HASH, o: TAB }, true);
 const clearState = () => drop(PK, true);
 
-// A run that stopped (or was cancelled) while waiting for an element after a data-changing click is "parked": its
-// state stays, without a time limit, so that it can continue at that step, e.g. after the page had to be refreshed
-// until a Print button appeared. Nothing that was already done is repeated. Continuing always asks first.
+// Where a run that stopped before step i can go on (-1: it cannot), c and k as in writeState. What was typed or
+// chosen after the last click that went through is gone once the page is refreshed, so it is done again (with the
+// click that opened its list, if it ends in a list row); a step in the new tab needs the click that opens that tab
+// again, unless that click changed data. Clicks before that are never repeated.
+const opener = j => { while (j > 0 && M[j - 1].win) j--; return j - 1; };
+const resumeAt = (c, k, i) => {
+  const after = Math.max(c, k >= 0 ? k : c);
+  let j = M.findIndex((x, n) => n > after && n < i && x.t !== 'click');
+  if (j >= 0 && k > c && k === j - 1 && !heavy(M[k]) && M.slice(j, i + 1).some(x => x.t === 'row')) j = k;
+  if (j >= 0) i = j;
+  if (M[i] && M[i].win) i = opener(i) > c ? opener(i) : -1;
+  return i;
+};
+// A run that stopped (or was cancelled) while waiting after a data-changing click, e.g. until a refresh brought a
+// Print button, is "parked": its state stays, without a time limit, and it can continue (see resumeAt). So does a
+// reload that was not continued in time. Continuing always asks first.
 const parked = () => {
   const s = getJSON(PK, true);
-  return mine(s) && s.n === M.length && s.i < s.n && s.c >= 0 && !readState() ? s : null;
+  return mine(s) && s.n === M.length && s.i < s.n && s.c >= 0 && !readState() && resumeAt(s.c, s.k, s.i) >= 0 ? s : null;
 };
 // true: continue the parked run p; false: do nothing; null: it was forgotten, start a new run.
 const askParked = p => {
-  const a = M[p.i], target = a.t === 'row' ? a.box : a.loc, code = SCAN && locate(SCAN.loc);
-  if (!a.win && !usable(target, document, a.t === 'click' ? a.text : undefined) && code && code.value && code.value.trim()) {
+  const a = M[p.i], target = a.t === 'row' ? a.box : a.loc, code = codeKey(), at = resumeAt(p.c, p.k, p.i);
+  if (!a.win && !usable(target, document, a.t === 'click' ? a.text : undefined) && code && code !== p.q) {
     if (confirm('A new code is ready, and the last run in this tab stopped before step ' + (p.i + 1) + ' (' + say(a) + '), which is not on this screen.\n'
       + 'Start a new run with it from step 1? Step ' + (p.c + 1) + ' (' + say(M[p.c]) + ') of the last run was already clicked: '
-      + 'check that item in the application.\n\nOK = start a new run\nCancel = other choices')) {
+      + 'check that item in the application.\n\nOK = start a new run\nCancel = continue the last run instead, or forget it (next questions)')) {
       clearState();
       drop(UK, true);
       return null;
     }
   }
   if (confirm('The last run in this tab clicked step ' + (p.c + 1) + ' (' + say(M[p.c]) + ') and stopped before step ' + (p.i + 1)
-    + ' (' + say(M[p.i]) + ').\nIt can continue there; nothing that was already done is repeated.\n\nOK = continue at step ' + (p.i + 1)
-    + '\nCancel = do not continue')) return true;
+    + ' (' + say(M[p.i]) + ').\nIt can continue at step ' + (at + 1) + ' (' + say(M[at]) + '). '
+    + (at < p.i ? 'Steps ' + (at + 1) + ' to ' + p.i + ' are done again: a refresh clears what they typed or chose. Nothing before them is repeated.'
+      : 'Nothing that was already done is repeated.')
+    + '\n\nOK = continue at step ' + (at + 1) + '\nCancel = do not continue')) return true;
   if (!confirm('Forget that run and start a new one from step 1? Step ' + (p.c + 1) + ' was already clicked, so that item may '
     + 'already be saved: check the application first.\n\nOK = forget it and start a new run\nCancel = do nothing')) return false;
   clearState();
@@ -148,10 +180,10 @@ const run = async (st, ctl) => {
   const oo = window.open;
   let i = st ? st.i : 0, watch = null; // watch: error texts that were already on screen before Save
   let committed = st && st.c >= 0 ? st.c : -1, finished = false; // committed: the last data-changing click (see heavy)
+  let clicked = st && st.k >= 0 ? st.k : committed; // the last click that went through
+  const code = (st && st.q) || codeKey();
   run.stage = run.where = 'start';
-  const opener = k => { while (k > 0 && M[k - 1].win) k--; return k - 1; }; // the click that opened the new tab of step k
-  if (M[i] && M[i].win && opener(i) > committed) i = opener(i);
-  let afterSave = committed >= 0 && !M.slice(committed + 1, i).some(x => x.t === 'click'); // rules before Generate are due
+  if (st && committed >= 0) { const at = resumeAt(committed, clicked, i); if (at >= 0) i = at; }
   const needsProfile = M.some(a => /^profile/.test(a.src || a.mode || ''));
   const profile = needsProfile ? (st && st.p) || chooseProfile(cfg) : null;
   const wrap = function (...a) {
@@ -172,7 +204,7 @@ const run = async (st, ctl) => {
       run.stage = 'step ' + (i + 1) + ' (' + say(a, true) + ')'; // for the log: no typed or chosen texts
       run.where = 'step ' + (i + 1) + ' (' + say(a) + ')'; // for the message on screen
       ctl.progress(i);
-      writeState(i, profile, committed); // an interrupted step is retried; a click that went through is not repeated (see below)
+      writeState(i, profile, committed, clicked, code); // an interrupted step is retried; a click that went through is not repeated (see below)
       const root = () => (a.win ? wins[1] && wins[1].document : document);
       // Waits until fn finds what it needs; on a timeout why() says what is wrong (hidden, disabled, ambiguous...).
       const wait = (fn, what, why) => waitForOr(() => { const d = root(); return d ? fn(d) : null; },
@@ -183,24 +215,30 @@ const run = async (st, ctl) => {
       });
       const element = (c, what, text) => wait(d => usable(c, d, text), what, d => whyNot(c, d, text) || 'it kept changing');
       const known = errorTexts();
+      // before a click or a list row: the rules due at this step, then "Save?" if it asks; false = declined
+      const gate = () => {
+        const fail = (w, msg) => {
+          const f = runRules(R, w, root());
+          if (f.length) throw Object.assign(new Error(msg + '\n' + f.join('\n')), { rule: committed >= 0 }); // after a Save it can continue here
+        };
+        if (i === GEN_AT) fail('beforeGenerate', 'Validation failed before the next step after Save.');
+        if (i === SAVE_AT) fail('beforeSave', 'Validation failed, nothing was saved.');
+        return !(a.confirm && O.confirmSave !== false && !confirm('Save?'));
+      };
+      const done = () => { // after a click or a list row went through
+        clicked = i;
+        if (heavy(a)) committed = i;
+        writeState(i + 1, profile, committed, clicked, code); // the click may reload the page: continue after it
+        watch = heavy(a) ? known : null; // from here on an application error stops the run
+      };
 
       if (a.t === 'click') {
-        const el = await element(a.loc, a.text ? '"' + a.text + '"' : '[' + a.loc.label + ']', a.text);
-        if (afterSave && !heavy(a)) {
-          const f = runRules(R, 'beforeGenerate', root());
-          if (f.length) throw new Error('Validation failed before the next step after Save.\n' + f.join('\n'));
-          afterSave = false;
-        }
-        if (heavy(a)) {
-          const f = runRules(R, 'beforeSave', root());
-          if (f.length) throw new Error('Validation failed, nothing was saved.\n' + f.join('\n'));
-        }
-        if (a.confirm && O.confirmSave !== false && !confirm('Save?')) { if (committed >= 0) run.note = note(); return 'cancelled'; }
+        // a link keeps only its Save-like word (cap): it is named by that word, never by the rest of its text
+        const el = await element(a.loc, a.text ? '"' + a.text + '"' : a.cap ? 'the "' + a.cap + '" link' : '[' + a.loc.label + ']', a.text);
+        if (!gate()) { if (committed >= 0) run.note = note(); return 'cancelled'; }
         watch = null;
         press(el);
-        if (heavy(a)) { committed = i; afterSave = true; }
-        writeState(i + 1, profile, committed); // the click may reload the page: continue after it
-        watch = heavy(a) ? known : null; // from here on an application error stops the run
+        done();
       } else if (a.t === 'row') {
         watch = null;
         if (/^profile/.test(a.mode) && !norm(text(a.mode, profile))) {
@@ -218,8 +256,9 @@ const run = async (st, ctl) => {
           throw new Error('More than one row matches:\n' + now.map(([r], k) => (k + 1) + ') ' + norm(r.textContent)).join('\n')
             + '\nNothing was selected. Choose by hand, or add your organization to the profile (Show).');
         }
+        if (!gate()) { if (committed >= 0) run.note = note(); return 'cancelled'; }
         press(now[0][1]);
-        writeState(i + 1, profile, committed);
+        done();
         await sleep(300);
       } else if (a.t === 'select') {
         const el = await element(a.loc, '"' + a.loc.label + '"');
@@ -254,22 +293,20 @@ const run = async (st, ctl) => {
     if (e.waited && SCAN && M[i - 1] === SCAN) {
       e.message += '\nIf the code has to be confirmed with Enter (a scanner does that by itself), press Enter after typing it.';
     }
-    park = committed >= 0 && (e.waited || e.cancel);
-    // typed values and choices made after that click are gone if the page is refreshed: continue where they start
-    if (park && M.slice(committed + 1, i).some(x => x.t !== 'click')) i = committed + 1;
-    // the new tab is gone after a stop: continue at the click that opens it again, unless that click saved
-    if (park && M[i].win) { if (opener(i) > committed) i = opener(i); else park = false; }
+    // after a data-changing click, a stop while waiting, a cancel or a failed rule can continue (see resumeAt)
+    const at = committed >= 0 && (e.waited || e.cancel || e.rule) ? resumeAt(committed, clicked, i) : -1;
+    park = at >= 0;
     if (committed >= 0) {
-      e.note = note() + (park ? ' Or continue at step ' + (i + 1) + ': refresh the page if it needs it, then click Play again.' : '');
+      e.note = note() + (park ? ' Or continue at step ' + (at + 1) + ': refresh the page if it needs it, then click Play again.' : '');
       if (!e.cancel) e.message += '\n\n' + e.note;
     }
     throw e;
   } finally {
-    if (park) writeState(i, profile, committed, 0); // time 0: continuing it always asks first
+    if (park) writeState(i, profile, committed, clicked, code, 0); // time 0: continuing it always asks first
     else clearState();
     // never start this recording again from step 1 without asking, once a Save went through and the run did not end
     if (finished) drop(UK, true);
-    else if (committed >= 0) setJSON(UK, { at: Date.now(), step: committed + 1, h: HASH, o: OPENED }, true);
+    else if (committed >= 0) setJSON(UK, { at: Date.now(), step: committed + 1, h: HASH, o: TAB }, true);
     if (window.open === wrap) window.open = oo; // unused; a replacement made by the page itself stays
   }
 };
@@ -381,7 +418,7 @@ const series = async () => {
 })();
 
 async function once(st) {
-  if (st && st.t0 && st.t) t0 = st.t0; // not for a parked run, which may have waited for hours
+  if (st && st.t0 && Date.now() - st.t < 60000) t0 = st.t0; // not for a parked run, which may have waited for hours
   // A bar with the progress and Cancel (also Esc) while Play works; removed whatever the outcome.
   const { bar, set: show } = statusBar('__play', 'Play');
   let stop = false;

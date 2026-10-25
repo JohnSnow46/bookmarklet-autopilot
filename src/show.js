@@ -35,7 +35,9 @@ if (L.length) {
 }
 
 // Profiles are personal to this computer: they override the ones in the configuration.
-if (confirm('Change the profiles (who and which organization Auto selects)?')) {
+// a recording that never uses a profile has nothing to change here
+const usesProfiles = !c.macro || c.macro.some(a => a && /^profile/.test(a.src || a.mode || ''));
+if (usesProfiles && confirm('Change the profiles (who and which organization Auto selects)?')) {
   const list = getProfiles(c).map(p => ({ ...p }));
   for (;;) {
     const a = prompt('Profiles:\n' + (list.map((p, i) => (i + 1) + '. ' + profileText(p)).join('\n') || '(none)')

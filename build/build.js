@@ -14,7 +14,7 @@ const VARIANTS = { series: ['play', "const PLAY_MODE='series';"], dryrun: ['play
 // in ways no pattern catches, which is why the sources stay short enough to read.
 const FORBIDDEN = new RegExp([
   /\b(fetch|XMLHttpRequest|sendBeacon|WebSocket|EventSource|eval|importScripts|Worker|SharedWorker|serviceWorker|postMessage|srcdoc)\b/.source,
-  /new Function|(^|[^\w.$])Function\(|new (Image|Audio)\b|document\.cookie|import\(|document\.write|\.href=|location\.(assign|replace)|\blocation(\.\w+)?=/.source,
+  /new Function|(^|[^\w.$])Function\(|new (Image|Audio)\b|document\.cookie|import\(|document\.write|\.href=|location\.(assign|replace)|\blocation(\.\w+)?=(?!=)/.source,
   // code in strings, loads through CSS or markup, form submission, and computed names that hide an API ("ev"+"al")
   /set(Timeout|Interval)\(["'`]|url\(|\.(request)?[sS]ubmit\(|<(img|script|iframe|link|object|embed|video|audio|source|style|svg)\b|\[["'`]\w*["'`]\+/.source,
   // elements that fetch a URL as soon as they exist

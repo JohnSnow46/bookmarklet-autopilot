@@ -265,8 +265,8 @@ test('after a Save whose result was not seen, Play does not start over without a
   await page.evaluate(bookmarklet('play'));
   expect(await waitDialog(s.dialogs, 'The last run in this tab')).toContain('clicked step 7 (click "Save")');
   await page.waitForTimeout(1500);
-  // a new code is on screen, so a new run is offered first; Cancel three times: nothing ran
-  expect(s.dialogs.map(d => d.message.slice(0, 24))).toEqual(['A new code is ready, and', 'The last run in this tab', 'Forget that run and star']);
+  // the same code again is not a new item: Cancel twice, nothing ran
+  expect(s.dialogs.map(d => d.message.slice(0, 24))).toEqual(['The last run in this tab', 'Forget that run and star']);
   expect(await saves(page)).toBe(1);
   await expect(page.locator('[id="__play"]')).toHaveCount(0);
 });
@@ -622,15 +622,16 @@ test('Record in a window opened by another page (a portal) is not taken for the 
   expect(rec.actions[0]).toMatchObject({ win: 0, src: 'scan' });
 });
 
-test('a link whose caption deletes or saves is guarded like a button', async ({ browser }) => {
+test('a link whose caption deletes or saves keeps only that word', async ({ browser }) => {
   const s = await newSession(browser);
   const page = await s.context.newPage();
   await page.goto(MOCK);
-  await page.evaluate(() => { const a = document.createElement('a'); a.id = 'del'; a.textContent = 'Delete'; document.body.append(a); });
+  await page.evaluate(() => { const a = document.createElement('a'); a.id = 'del'; a.textContent = 'Delete order 48213'; document.body.append(a); });
   await page.evaluate(bookmarklet('record'));
   await page.locator('[id="del"]').click();
   const rec = await page.evaluate(() => JSON.parse(localStorage.getItem('autoRec')));
-  expect(rec.actions[0]).toMatchObject({ t: 'click', text: 'Delete' });
+  expect(rec.actions[0]).toMatchObject({ t: 'click', cap: 'delete' });
+  expect(rec.actions[0].text).toBeUndefined();
 });
 
 /* ---------- validation rules in Play ---------- */
@@ -691,4 +692,110 @@ test('after a blocked new tab, continuing clicks the button that opens it again'
   expect(await waitDialog(s.dialogs, 'The last run in this tab')).toContain('OK = continue at step 9');
   await printed(await popupP);
   expect(await saves(page)).toBe(1);
+});
+
+/* ---------- third review and test round ---------- */
+
+// A small page of its own on the demo's address: Save and Generate count their clicks (kept over a reload),
+// Weight is typed after Generate, and Finish only shows when told to.
+const OWN = { frame: [], alt: '' };
+const own = (id, label) => ({ ...OWN, sel: '[id="' + id + '"]', label });
+const ownPage = (page, finish) => page.evaluate(show => {
+  document.body.innerHTML = '<button id="sv">Save</button> <button id="gen">Generate</button> <input id="w">'
+    + ' <button id="fin" style="display:' + (show ? 'inline' : 'none') + '">Finish</button>';
+  const count = k => () => localStorage.setItem(k, String(+(localStorage.getItem(k) || 0) + 1));
+  document.getElementById('sv').onclick = count('nSave');
+  document.getElementById('gen').onclick = count('nGen');
+  document.getElementById('fin').onclick = () => localStorage.setItem('weightAtFinish', document.getElementById('w').value);
+}, finish);
+const OWN_MACRO = [
+  { t: 'click', win: 0, loc: own('sv', 'Save'), text: 'Save' },
+  { t: 'click', win: 0, loc: own('gen', 'Generate'), text: 'Generate' },
+  { t: 'set', win: 0, loc: own('w', 'Weight'), value: '5' },
+  { t: 'click', win: 0, loc: own('fin', 'Finish'), text: 'Finish' },
+];
+const counts = page => page.evaluate(() => [+localStorage.getItem('nSave'), +localStorage.getItem('nGen'), localStorage.getItem('weightAtFinish')]);
+
+test('a refresh while Play waits: what was typed after the last click is typed again, Save and Generate are not repeated', async ({ browser }) => {
+  for (const late of [false, true]) {
+    const s = await newSession(browser);
+    const page = await s.context.newPage();
+    await page.goto(MOCK);
+    await saveMacro(page, OWN_MACRO, { waitSec: 2 });
+    await ownPage(page, false);
+    await page.evaluate(bookmarklet('play'));
+    expect(await waitDialog(s.dialogs, 'Play stopped', 20000)).toContain('Or continue at step 3');
+    await page.reload(); // the refresh empties Weight
+    await ownPage(page, true);
+    if (!late) { // clicked again within a minute: it continues without asking
+      await page.evaluate(() => { const st = JSON.parse(sessionStorage.getItem('playState')); st.t = Date.now(); sessionStorage.setItem('playState', JSON.stringify(st)); });
+    }
+    s.dialogs.length = 0;
+    await page.evaluate(bookmarklet('play'));
+    if (late) expect(await waitDialog(s.dialogs, 'The last run in this tab')).toContain('Steps 3 to 3 are done again');
+    await expect.poll(() => counts(page)).toEqual([1, 1, '5']);
+    expect(s.dialogs.some(d => d.message.startsWith('The last run'))).toBe(late);
+  }
+});
+
+test('a list row marked to ask "Save?" asks, and a Delete link in a row is recorded as data-changing', async ({ browser }) => {
+  const s = await newSession(browser, { '=Save?': false });
+  const page = await s.context.newPage();
+  await page.goto(MOCK);
+  await page.evaluate(() => {
+    document.body.insertAdjacentHTML('beforeend', '<table id="orders"><tr><td>Order 7 Jan Kowalski</td><td><a id="appr">Approve</a></td></tr></table>');
+    document.getElementById('appr').onclick = () => localStorage.setItem('approved', '1');
+  });
+  await page.evaluate(bookmarklet('record'));
+  await page.locator('[id="appr"]').click();
+  const rec = await page.evaluate(() => JSON.parse(localStorage.getItem('autoRec')));
+  expect(rec.actions[0]).toMatchObject({ t: 'row', cap: 'approve' });
+  await page.evaluate(() => { document.getElementById('__record').remove(); localStorage.removeItem('approved'); }); // the recorded click itself approved once
+  await page.evaluate(a => localStorage.setItem('autoCfg', JSON.stringify({ v: 4, macro: [{ ...a, mode: 'only', text: '', confirm: true }], opts: { confirmSave: true }, rules: [] })), rec.actions[0]);
+  await page.evaluate(bookmarklet('play'));
+  await waitDialog(s.dialogs, 'Save?');
+  await expect(page.locator('[id="__play"]')).toContainText('Cancelled');
+  expect(await page.evaluate(() => localStorage.getItem('approved'))).toBeNull();
+});
+
+test('rules are checked at the Save step and before the step after it, even when that step is data-changing too', async ({ browser }) => {
+  const s = await newSession(browser);
+  const page = await s.context.newPage();
+  await page.goto(MOCK + '?view=form&code=5909876543210');
+  const genAsks = FORM.map(a => (a.text === 'Generate' ? { ...a, confirm: true } : a));
+  const sameLines = { type: 'equal', a: at('pt1:r2:0:it1::content', 'Line 1'), b: at('pt1:r2:0:it2::content', 'Line 2'), ci: false, when: 'beforeSave' };
+  await page.evaluate(([m, r]) => localStorage.setItem('autoCfg', JSON.stringify({ v: 4, macro: m, opts: { waitSec: 5 }, rules: r })),
+    [genAsks, [sameLines, { ...NEVER, when: 'beforeGenerate' }]]);
+  await page.evaluate(bookmarklet('play'));
+  const msg = await waitDialog(s.dialogs, 'Play stopped', 30000);
+  expect(msg).toContain('Validation failed before the next step after Save');
+  expect(msg).toContain('Or continue at step 5'); // fix it, then go on: Save is not repeated
+  expect(s.dialogs.filter(d => d.message === 'Save?')).toHaveLength(1); // only Save asked; Generate was not reached
+  expect(await saves(page)).toBe(1);
+});
+
+test('a parked run offers a new run only for a different code', async ({ browser }) => {
+  const s = await newSession(browser, { 'A new code is ready': false, 'The last run in this tab': false, 'Forget that run': false });
+  const page = await s.context.newPage();
+  await page.goto(MOCK);
+  await saveMacro(page, TO_FORM.concat(FORM), { waitSec: 3 });
+  await page.addStyleTag({ content: '[id="pt1:r3:0:cb_gen"]{display:none}' });
+  await page.locator('[data-c="5909876543210"]').click();
+  await page.evaluate(bookmarklet('play'));
+  await waitDialog(s.dialogs, 'Play stopped', 40000);
+  await page.locator('[id="pt1:r3:0:cb_new"]').click();
+  await page.locator('[data-c="5901234123457"]').click(); // another product
+  s.dialogs.length = 0;
+  await page.evaluate(bookmarklet('play'));
+  expect(await waitDialog(s.dialogs, 'A new code is ready')).toContain('Cancel = continue the last run instead');
+});
+
+test('Dry run still works when the rules need a Save step the recording lacks', async ({ browser }) => {
+  const s = await newSession(browser);
+  const page = await s.context.newPage();
+  await page.goto(MOCK);
+  await page.evaluate(([m, r]) => localStorage.setItem('autoCfg', JSON.stringify({ v: 4, macro: m, opts: {}, rules: r })),
+    [[SCAN], [{ ...NEVER, when: 'beforeSave' }]]);
+  await page.evaluate(bookmarklet('dryrun'));
+  expect(await waitDialog(s.dialogs, 'Dry run')).toContain('Rules right now');
 });

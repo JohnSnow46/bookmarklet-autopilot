@@ -381,7 +381,7 @@ const modeText = m => ({ only: ' (the only row)', 'profile.name': ' (your name)'
 // A one-line description of a recorded step. plain: without typed texts or chosen list texts (for the run log).
 const say = (a, plain) => {
   const l = a.loc ? a.loc.label : '', w = a.win ? ' [new tab]' : '', t = plain ? '' : a.text;
-  if (a.t === 'click') return 'click ' + (a.text ? '"' + a.text + '"' : '[' + l + ']') + w; // button captions are not data
+  if (a.t === 'click') return 'click ' + (a.text ? '"' + a.text + '"' : a.cap ? 'the "' + a.cap + '" link' : '[' + l + ']') + w; // button captions are not data
   if (a.t === 'row') return 'choose the list row' + (t ? ' "' + short(t) + '"' : '') + modeText(a.mode) + w;
   if (a.t === 'select') return 'choose' + (t ? ' "' + t + '"' : '') + ' in "' + l + '"' + modeText(a.mode) + w;
   const what = a.src === 'scan' ? 'the scanned code' : a.src === 'copy' ? 'a copy of "' + a.from.label + '"'

@@ -13,7 +13,7 @@
 
 1. Open your application, on the screen where your work starts.
 2. Click **Record** in the bookmarks bar. A red bar appears at the top.
-3. Do your work **once**, normally, until the end. **Type or scan** the code yourself (do not pick it from a list of codes): that is how Play knows what changes every time.
+3. Do your work **once**, normally, until the end. **Type or scan** the code yourself (do not pick it from a list of codes; in the demo, do not use the code buttons of its Test panel): that is how Play knows what changes every time.
    - Does your work open a **new tab** (e.g. a print preview)? Click **Record** again in that new tab and carry on there.
    - Did the page **reload completely**? Click **Record** again and press **OK** to continue the recording.
 4. Click **Stop and review** on the red bar, in the **last** tab you worked in.
@@ -30,7 +30,7 @@
 
 **Need the button that only appears after a refresh?** (e.g. **Print** after a document is generated)
 
-Play waits, then stops and says **"continue at step N"**. Refresh the page (F5) until the button is there, click **Play** and press **OK** to continue: it carries on at that step and does **not** save again.
+Play waits, then stops and says **"continue at step N"**. Refresh the page (F5) until the button is there, click **Play** and press **OK** to continue: it carries on at that step and does **not** save again. Fields it filled in after the last click are filled in again, because the refresh empties them.
 
 **If something goes wrong**
 
@@ -89,7 +89,8 @@ never undone.
 
 Play is careful with Save:
 
-- Validation rules (Validate) are checked by Play too: *before Save* before every click that saves (with or without the "Save?" question), *before Generate* before the first click after it. A recording where Play could not tell where that is is refused, never run without the rules.
+- Validation rules (Validate) are checked by Play too: *before Save* before the step that saves (the first step that asks "Save?", else the first Save-like click), *before Generate* before the first click after that step. A recording where Play could not tell where that is is refused, never run without the rules.
+- Links and list rows count as well: a "Delete" or "Approve" link in a table row can ask "Save?" and is never repeated without asking. Of a link caption only that word is kept, not the names or numbers next to it.
 - Only one Play, Series or Auto runs on a page at a time; a second click is refused, so nothing is saved twice in parallel.
 - If a Save-like step (one that asks "Save?", or whose caption looks like save, submit, send, delete, …) was clicked
   and the run then stopped, was cancelled, or a page reload after it was not continued within a minute, the stop

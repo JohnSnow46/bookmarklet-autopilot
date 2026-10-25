@@ -13,7 +13,8 @@ if (busy()) { alert(busy() + ' is running on this page: wait for it to finish, t
 let rec = getJSON(RK);
 if (!store()) { alert('The browser blocks storage on this page, so nothing can be recorded here.'); return; }
 if (rec && !Array.isArray(rec.actions)) rec = null; // a damaged recording in progress: start a new one
-if (rec) rec.actions = rec.actions.filter(a => a && typeof a === 'object' && typeof a.t === 'string' && a.loc); // and drop damaged steps
+const ok = a => a && typeof a === 'object' && typeof a.t === 'string' && a.loc;
+if (rec) rec.actions = rec.actions.filter(ok); // and drop damaged steps
 // The tab where a recording starts keeps its id (RT, per tab). A tab whose opener is that tab is the new tab the
 // routine opened (steps there are marked win 1); any other tab, e.g. a window a portal opened, starts on its own.
 const RT = 'autoRecTab';
@@ -23,7 +24,7 @@ if (win) {
   // it joins the recording of the tab that opened it: nothing to ask, and nothing of that tab is overwritten
 } else if (rec && rec.actions.length && !rec.done) {
   if (!confirm('Continue the recording (' + rec.actions.length + ' steps so far)? Cancel = start a new one')) rec = null;
-  else { const r = getJSON(RK); if (r && Array.isArray(r.actions) && !r.done) rec = r; } // steps another tab added meanwhile
+  else { const r = getJSON(RK); if (r && Array.isArray(r.actions) && !r.done) rec = { ...r, actions: r.actions.filter(ok) }; } // steps another tab added meanwhile
 } else if (rec && rec.done) {
   if (!confirm('A recording already exists. Record again?')) return;
   rec = null;
@@ -31,6 +32,7 @@ if (win) {
 if (!rec || !Array.isArray(rec.actions) || rec.done) rec = { actions: [], done: false };
 if (!rec.id) rec.id = String(Date.now()) + Math.random().toString(36).slice(2, 8);
 if (!win) setJSON(RT, rec.id, true);
+else drop(RT, true); // the copy of the opener's id: a tab that this one opens is not the recording's new tab
 const save = () => setJSON(RK, rec);
 // The page and the new tab it opened record into the same storage: always go on from what is stored there.
 // false when the recording was finished (or cancelled) in the other tab, or another one was started there.
@@ -76,11 +78,17 @@ const onClick = e => {
   const tag = el.tagName.toLowerCase();
   if (textLike(el) || tag === 'select' || tag === 'option' || tag === 'label' || tag === 'html' || tag === 'body') return;
   const a = { t: 'click', win, loc: where(el) };
+  // the Save-like word of a link or button caption (e.g. "Delete"), kept without the rest of the text (names, numbers)
+  const m = el.matches('a,button,[role=button]') && norm(el.textContent || el.value || '').match(SAVE_LIKE);
+  const cap = m ? m[2].toLowerCase() : '';
   const row = rowOf(el);
   if (!buttonLike(el) && row.parentElement && (row !== el || el.matches('li,[role=option],tr'))) {
     // a row of a list or a table: Play finds it again by its text, not by its position
     Object.assign(a, { t: 'row', match: optSelector(el), text: norm(row.textContent).slice(0, 120), box: describe(row.parentElement), mode: 'fixed' });
-  } else if (buttonLike(el) || (tag === 'a' && SAVE_LIKE.test(el.textContent || ''))) { // a link can save or delete, too
+    if (cap) a.cap = cap;
+  } else if (tag === 'a' && !buttonLike(el)) {
+    if (cap) a.cap = cap; // a link can save or delete, too
+  } else if (buttonLike(el)) {
     a.text = norm(el.textContent || el.value || '').slice(0, 60);
   }
   add(a);
@@ -165,7 +173,7 @@ const review = () => {
   }
 
   // steps that need a confirmation first: the ones that look like Save
-  const dflt = steps.map((a, i) => (a.t === 'click' && SAVE_RE.test(a.text || '') ? i + 1 : 0)).filter(Boolean).join(',');
+  const dflt = steps.map((a, i) => ((a.t === 'click' || a.t === 'row') && SAVE_RE.test((a.t === 'click' && a.text) || a.cap || '') ? i + 1 : 0)).filter(Boolean).join(',');
   const ask = prompt('Ask "Save?" before which steps? Step numbers, comma separated. 0 = never, empty = the suggestion:\n' + steps.map((a, i) => (i + 1) + '. ' + say(a)).join('\n'), dflt);
   if (ask === null) return;
   const askAt = new Set((ask.trim() || dflt).split(',').map(x => parseInt(x, 10) - 1)); // 0 gives -1: never
