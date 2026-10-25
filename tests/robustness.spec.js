@@ -551,3 +551,43 @@ test('a damaged run log does not hide why Play stopped', async ({ browser }) => 
   const L = await page.evaluate(() => JSON.parse(localStorage.getItem('autoLog')));
   expect(L).toHaveLength(1);
 });
+
+test('damaged entries inside the run log, the recording or the profiles are left out', async ({ browser }) => {
+  const s = await newSession(browser);
+  const page = await s.context.newPage();
+  await page.goto(MOCK);
+  const errors = [];
+  page.on('pageerror', e => errors.push(e.message));
+  await page.evaluate(() => {
+    localStorage.setItem('autoLog', JSON.stringify([{ result: 'ok' }, null, { at: '2026-01-02T10:00:00Z', result: 'ok' }]));
+    localStorage.setItem('autoProfiles', JSON.stringify([null, { name: 'Anna' }]));
+    localStorage.setItem('autoRec', JSON.stringify({ actions: [null, { t: 'click' }], done: false }));
+  });
+  await page.evaluate(bookmarklet('show'));
+  expect(await waitDialog(s.dialogs, 'Steps:')).toContain('1. Anna');
+  expect(await waitDialog(s.dialogs, 'Run log (1 runs')).toContain('Average time of a completed run: 0 s');
+  await page.evaluate(bookmarklet('record'));
+  await expect(page.locator('[id="__record"]')).toContainText('0 step(s)');
+  expect(errors).toEqual([]);
+});
+
+test('Auto says that a recording made with Record is played with Play', async ({ browser }) => {
+  const s = await newSession(browser);
+  const page = await s.context.newPage();
+  await page.goto(MOCK);
+  await page.evaluate(() => localStorage.setItem('autoCfg', JSON.stringify({ v: 4, macro: [], opts: {}, rules: [] })));
+  await page.evaluate(bookmarklet('auto'));
+  await waitDialog(s.dialogs, 'The saved setup is a recording made with Record');
+});
+
+test('Dry run puts back the outline the page gave an element', async ({ browser }) => {
+  const s = await newSession(browser);
+  const page = await s.context.newPage();
+  await page.goto(MOCK);
+  await saveMacro(page, [SCAN]);
+  const field = page.locator('[id="pt1:r1:0:it1::content"]');
+  await field.evaluate(el => { el.style.outline = '2px dotted red'; });
+  await page.evaluate(bookmarklet('dryrun'));
+  await waitDialog(s.dialogs, 'Dry run');
+  expect(await field.evaluate(el => el.style.outline)).toBe('red dotted 2px');
+});

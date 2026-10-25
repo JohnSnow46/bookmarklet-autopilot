@@ -10,9 +10,13 @@ const SCRIPTS = ['record', 'play', 'series', 'dryrun', 'learn', 'auto', 'validat
 const VARIANTS = { series: ['play', "const PLAY_MODE='series';"], dryrun: ['play', "const PLAY_MODE='dry';"] };
 
 // Security guard: bookmarklets must never talk to the network, load anything, navigate away or run dynamic code.
+// It is a tripwire against mistakes in this repository's own code, not a sandbox: determined code can hide an API
+// in ways no pattern catches, which is why the sources stay short enough to read.
 const FORBIDDEN = new RegExp([
   /\b(fetch|XMLHttpRequest|sendBeacon|WebSocket|EventSource|eval|importScripts|Worker|SharedWorker|serviceWorker|postMessage|srcdoc)\b/.source,
-  /new Function|new Image\b|document\.cookie|import\(|document\.write|\.href=|location\.(assign|replace)/.source,
+  /new Function|(^|[^\w.$])Function\(|new Image\b|document\.cookie|import\(|document\.write|\.href=|location\.(assign|replace)|\blocation=/.source,
+  // code in strings, loads through CSS or markup, form submission, and computed names that hide an API ("ev"+"al")
+  /set(Timeout|Interval)\(["'`]|url\(|\.submit\(\)|<(img|script|iframe|link|object|embed)\b|\[["'`]\w*["'`]\+/.source,
   // elements that fetch a URL as soon as they exist
   /createElement\(["'`](script|iframe|frame|img|link|object|embed|audio|video|source|style)["'`]\)/.source,
 ].join('|'));

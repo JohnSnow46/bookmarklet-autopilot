@@ -1,6 +1,7 @@
 // EMBED is defined only by an exported bookmarklet (Export): then the configuration is built in.
 let cfg;
 try { cfg = embeddedOrSaved(typeof EMBED !== 'undefined' ? EMBED : undefined); } catch (e) { alert(e.message); return; }
+if (cfg && cfg.v === 4) { alert('The saved setup is a recording made with Record: use the Play bookmarklet for it.'); return; }
 if (!cfg || !cfg.steps || !cfg.steps.search) { alert('Run the Learn bookmarklet first.'); return; }
 if (cfg.v !== 3) { alert('The configuration is in an old format. Run Learn again.'); return; }
 const S = cfg.steps, C = cfg.opts || {}, R = cfg.rules || [];

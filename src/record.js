@@ -12,6 +12,7 @@ if (window.__autopilotRun) { alert(window.__autopilotRun + ' is running on this 
 let rec = getJSON(RK);
 if (!store()) { alert('The browser blocks storage on this page, so nothing can be recorded here.'); return; }
 if (rec && !Array.isArray(rec.actions)) rec = null; // a damaged recording in progress: start a new one
+if (rec) rec.actions = rec.actions.filter(a => a && typeof a === 'object' && typeof a.t === 'string' && a.loc); // and drop damaged steps
 if (rec && rec.actions && rec.actions.length && !rec.done) {
   if (!confirm('Continue the recording (' + rec.actions.length + ' steps so far)? Cancel = start a new one')) rec = null;
 } else if (rec && rec.done && !win) {

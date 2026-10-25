@@ -332,9 +332,9 @@ const errorTexts = errStep => {
 /* ---------- profiles (who / which organization Auto selects) and searchable lists ---------- */
 // Personal profiles of this computer win over the ones in the configuration.
 const getProfiles = cfg => {
-  const p = getJSON('autoProfiles');
-  if (Array.isArray(p) && p.length) return p;
-  return (cfg.opts && cfg.opts.profiles) || [];
+  const valid = l => (Array.isArray(l) ? l.filter(x => x && typeof x.name === 'string' && x.name.trim()) : []); // damaged entries are left out
+  const p = valid(getJSON('autoProfiles'));
+  return p.length ? p : valid(cfg.opts && cfg.opts.profiles);
 };
 const profileText = p => p.name + (p.org ? ' / ' + p.org : '');
 

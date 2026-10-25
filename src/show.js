@@ -17,11 +17,12 @@ alert((c.macro ? 'Recorded steps:\n' : 'Steps:\n') + steps.join('\n')
   + '\n\nValidation rules:\n' + ((c.rules || []).map((r, i) => (i + 1) + '. ' + ruleText(r)).join('\n') || '(none)'));
 
 // Run log (written by Play and Series): counts, average time, where runs stopped.
-const L = getJSON('autoLog') || [];
-if (Array.isArray(L) && L.length) {
+const raw = getJSON('autoLog'); // damaged entries are left out
+const L = Array.isArray(raw) ? raw.filter(x => x && typeof x === 'object' && typeof x.at === 'string') : [];
+if (L.length) {
   const day = new Date().toISOString().slice(0, 10);
   const ok = L.filter(x => x.result === 'ok'), today = L.filter(x => x.at.slice(0, 10) === day);
-  const avg = ok.length ? Math.round(ok.reduce((s, x) => s + x.ms, 0) / ok.length / 1000) : 0;
+  const avg = ok.length ? Math.round(ok.reduce((s, x) => s + (+x.ms || 0), 0) / ok.length / 1000) : 0;
   const where = {};
   L.filter(x => x.result === 'stopped').forEach(x => { const k = x.step + (x.why ? ': ' + x.why : ''); where[k] = (where[k] || 0) + 1; });
   const top = Object.entries(where).sort((p, q) => q[1] - p[1]).slice(0, 5).map(([k, n]) => n + 'x ' + k);

@@ -259,9 +259,10 @@ const dryRun = async () => {
       res = why || 'OK';
       if (ok) {
         el.scrollIntoView({ block: 'center' });
+        const was = el.style.outline; // the page's own outline is put back
         el.style.outline = '3px solid rgb(46,125,50)';
         await sleep(500);
-        el.style.outline = '';
+        el.style.outline = was;
       }
       if (ok && a.src === 'copy' && !locate(a.from)) res += ', but the field to copy from is missing';
     }
