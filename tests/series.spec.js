@@ -100,7 +100,8 @@ test('Series runs product after product, the same code twice counts twice, Stop 
 
   const L = await logOf(run);
   expect(L.map(x => x.result + ':' + x.mode)).toEqual(['ok:series', 'ok:series', 'ok:series']);
-  expect(JSON.stringify(L)).not.toMatch(/590|Lidar|Battery|You \(test\)/); // no codes, products or people
+  // no codes, products or people (the timestamp is left out: its milliseconds can contain "590")
+  expect(JSON.stringify(L.map(({ at, ...x }) => x))).not.toMatch(/590|Lidar|Battery|You \(test\)/);
 });
 
 test('a stopped run is logged with its step; Show summarises the log and keeps it unless told otherwise', async ({ browser }) => {
