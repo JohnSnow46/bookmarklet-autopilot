@@ -147,6 +147,8 @@ const unmark = page => page.evaluate(() => document.querySelectorAll('.__shotmar
   await page.evaluate(bm('play'));
   for (let i = 0; i < 150 && !dialogs.includes('Save?'); i++) await page.waitForTimeout(200);
   await page.waitForTimeout(500);
+  // the run already ended with Cancel: hide its result bar so the picture shows the moment of the question
+  await page.evaluate(() => { const b = document.getElementById('__play'); if (b) b.remove(); });
   await drawDialog(page, 'Save?', ['Cancel', 'OK']);
   await shot(page, '17-play-save');
   await clearDialog(page);

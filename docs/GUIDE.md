@@ -134,13 +134,14 @@ message says so: check in the application whether the item was saved. The next P
 again, so the same item is not saved twice by accident.
 
 If a button only appears after you refresh the page (for example Print, while the printout is being made), Play stops
-waiting for it. Refresh until the button is there, click **Play**, and answer **OK** to "continue at step …". It goes
-on from that step and does not save again.
+waiting for it. Refresh until the button is there, click **Play**, and answer **OK** to "continue at step …". It fills
+in again what the refresh cleared (the question names those steps), goes on from there and does not save again.
 
 ## 7. Many items: Series
 
 Click **Series** once. A blue bar waits for a code; enter one and the whole routine runs, then it waits for the next
-code. Two identical codes in a row count as two items. Press **Stop** on the bar when you are done.
+code. If the application leaves you on another screen after a run, go back to the screen with the code field first
+(for example **New scan**). Two identical codes in a row count as two items. Press **Stop** on the bar when you are done.
 
 ![Series waits for the next code](guide/19-series-wait.png)
 
