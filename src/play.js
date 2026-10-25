@@ -276,16 +276,12 @@ const dryRun = async () => {
 // Series: run, then wait for the next scanned code and run again, until Stop.
 const series = async () => {
   if (!SCAN) { alert('The recording has no scan step, so Series cannot tell when the next product comes.'); return; }
-  const bar = makeBar('__series');
+  const { bar, set } = statusBar('__series', 'Series');
   let stop = false, done = 0;
-  const show = msg => {
-    bar.textContent = '';
-    const b = document.createElement('b');
-    b.textContent = 'Series: ';
-    bar.appendChild(b);
-    bar.appendChild(document.createTextNode(done + ' done. ' + msg));
-    barButton(bar, 'Stop', () => { stop = true; show('Stopping...'); });
-  };
+  const show = msg => set(done + ' done. ' + msg);
+  const halt = () => { if (!stop) { stop = true; show('Stopping...'); } };
+  barButton(bar, 'Stop (Esc)', halt);
+  const offEsc = onEsc(halt);
   for (;;) {
     show('Scan the next code.');
     // A code counts once the scanner has finished typing it (unchanged for ~0.6 s). After a run the field must
@@ -314,6 +310,7 @@ const series = async () => {
     if (r !== 'ok') { if (run.note) alert('Series was cancelled at "Save?". ' + run.note); break; }
     done++;
   }
+  offEsc();
   bar.remove();
   alert('Series finished: ' + done + ' product(s).');
 };
@@ -345,22 +342,16 @@ const series = async () => {
 async function once(st) {
   if (st && st.t0) t0 = st.t0;
   // A bar with the progress and Cancel (also Esc) while Play works; removed whatever the outcome.
-  const bar = makeBar('__play');
+  const { bar, set: show } = statusBar('__play', 'Play');
   let stop = false;
-  const show = (msg, end) => {
-    bar.textContent = '';
-    const b = document.createElement('b');
-    b.textContent = 'Play: ';
-    bar.appendChild(b);
-    bar.appendChild(document.createTextNode(msg));
-    if (!end) barButton(bar, 'Cancel (Esc)', () => { stop = true; show('Cancelling...'); });
-  };
-  const esc = e => { if (e.key === 'Escape' && !stop) { stop = true; show('Cancelling...'); } };
-  document.addEventListener('keydown', esc, true);
+  const cancel = () => { if (!stop) { stop = true; show('Cancelling...'); } };
+  barButton(bar, 'Cancel (Esc)', cancel);
+  const offEsc = onEsc(cancel);
   const finish = (msg, color) => {
-    document.removeEventListener('keydown', esc, true);
+    offEsc();
     if (!msg) return bar.remove();
-    show(msg, true);
+    bar.querySelectorAll('button').forEach(x => x.remove());
+    show(msg);
     bar.style.background = color;
     setTimeout(() => bar.remove(), 3000);
   };

@@ -144,6 +144,64 @@ test('Stop in Series also stops a run that is under way', async ({ browser }) =>
   expect(L.map(x => x.result + ':' + x.mode)).toEqual(['cancelled:series']);
 });
 
+test('Esc also works with the focus inside an iframe, and in Series', async ({ browser }) => {
+  const s = await newSession(browser);
+  const page = await s.context.newPage();
+  await page.goto(MOCK + '?variant=iframe&view=form&code=5909876543210');
+  const inFrame = l => ({ ...l, frame: ['[id="pt1:r2:0:frm"]'] });
+  await saveMacro(page, [{ t: 'set', win: 0, loc: inFrame(at('pt1:r2:0:it3::content', 'Line 3')), value: 'x' }], { waitSec: 60 });
+  const frame = page.frameLocator('[id="pt1:r2:0:frm"]');
+  await frame.locator('[id="pt1:r2:0:it3::content"]').evaluate(el => { el.disabled = true; });
+  await page.evaluate(bookmarklet('play'));
+  await expect(page.locator('[id="__play"]')).toContainText('step 1/1');
+  await frame.locator('[id="pt1:r2:0:it2::content"]').focus();
+  await frame.locator('[id="pt1:r2:0:it2::content"]').press('Escape');
+  await expect(page.locator('[id="__play"]')).toContainText('Cancelled at step 1');
+
+  await page.goto(MOCK);
+  await saveMacro(page, [SCAN, { t: 'click', win: 0, loc: SEARCH_BTN, text: 'Search' }], { waitSec: 60 });
+  s.dialogs.length = 0;
+  await page.evaluate(bookmarklet('series'));
+  await expect(page.locator('[id="__series"]')).toContainText('Scan the next code.');
+  await page.keyboard.press('Escape');
+  expect(await waitDialog(s.dialogs, 'Series finished')).toBe('Series finished: 0 product(s).');
+});
+
+test('an Esc that the page uses itself (e.g. to close its dialog) does not cancel Play', async ({ browser }) => {
+  const s = await newSession(browser);
+  const page = await s.context.newPage();
+  await page.goto(MOCK);
+  await page.evaluate(() => document.addEventListener('keydown', e => { if (e.key === 'Escape') e.preventDefault(); }));
+  await saveMacro(page, [SCAN, { t: 'click', win: 0, loc: SEARCH_BTN, text: 'Search' }], { waitSec: 60 });
+  await page.locator('[data-c="5909876543210"]').click();
+  await page.evaluate(() => { document.getElementById('pt1:r1:0:cb1').disabled = true; });
+  await page.evaluate(bookmarklet('play'));
+  await expect(page.locator('[id="__play"]')).toContainText('step 2/2');
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(500);
+  await expect(page.locator('[id="__play"]')).toContainText('step 2/2'); // still running
+  await page.evaluate(() => { document.getElementById('pt1:r1:0:cb1').disabled = false; });
+  await expect(page.locator('[id="__play"]')).toContainText('Done, 2 steps.');
+});
+
+test('keyboard focus stays on Cancel while the steps change', async ({ browser }) => {
+  const s = await newSession(browser);
+  const page = await s.context.newPage();
+  await page.goto(MOCK);
+  await saveMacro(page, TO_FORM.concat(FORM), { waitSec: 60 });
+  await page.locator('[data-c="5909876543210"]').click();
+  await page.evaluate(() => { document.getElementById('pt1:r1:0:cb1').disabled = true; });
+  await page.evaluate(bookmarklet('play'));
+  const cancel = page.locator('[id="__play"]').getByRole('button', { name: 'Cancel (Esc)' });
+  await expect(page.locator('[id="__play"]')).toContainText('step 2/');
+  await cancel.focus();
+  await page.evaluate(() => { document.getElementById('pt1:r1:0:cb1').disabled = false; });
+  await expect(page.locator('[id="__play"]')).toContainText('step 3/'); // the text changed...
+  await expect(cancel).toBeFocused(); // ...the button kept the focus
+  await page.keyboard.press('Enter');
+  await expect(page.locator('[id="__play"]')).toContainText('Cancelled at step');
+});
+
 test('Play says when it is done and removes its bar', async ({ browser }) => {
   const s = await newSession(browser);
   const page = await s.context.newPage();

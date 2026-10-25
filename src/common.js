@@ -235,19 +235,32 @@ const barButton = (b, text, fn) => {
 
 // Calls handler for mousedown/click (capture phase) in the page and in every same-origin iframe, including
 // frames that load later or reload. Returns a function that removes the handler again.
-const hookPicker = (handler, types = ['mousedown', 'click']) => {
+const hookPicker = (handler, types = ['mousedown', 'click'], capture = true) => {
   const seen = new Set();
   const run = () => allDocs().forEach(d => {
     if (seen.has(d)) return;
     seen.add(d);
-    types.forEach(t => d.addEventListener(t, handler, true));
+    types.forEach(t => d.addEventListener(t, handler, capture));
   });
   run();
   const t = setInterval(run, 250);
   return () => {
     clearInterval(t);
-    seen.forEach(d => { try { types.forEach(t => d.removeEventListener(t, handler, true)); } catch (_) {} });
+    seen.forEach(d => { try { types.forEach(t => d.removeEventListener(t, handler, capture)); } catch (_) {} });
   };
+};
+
+// Calls fn when Esc is pressed in the page or a same-origin iframe, unless the page itself handled that Esc (e.g. to
+// close its own dialog). Returns a function that removes the handler again.
+const onEsc = fn => hookPicker(e => { if (e.key === 'Escape' && !e.defaultPrevented) fn(); }, ['keydown'], false);
+
+// A bar with a bold title and a status text; buttons added to it stay in place while the text changes, so keyboard
+// focus on them is kept.
+const statusBar = (id, title) => {
+  const bar = makeBar(id), t = document.createElement('b'), s = document.createElement('span');
+  t.textContent = title + ': ';
+  bar.append(t, s);
+  return { bar, set: msg => { s.textContent = msg; } };
 };
 
 /* ---------- validation rules ---------- */
